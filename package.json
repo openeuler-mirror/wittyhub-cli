@@ -1,10 +1,10 @@
 {
-  "name": "skills",
+  "name": "wittyhub",
   "version": "1.5.13",
   "description": "The open agent skills ecosystem",
   "type": "module",
   "bin": {
-    "skills": "./bin/cli.mjs",
+    "wittyhub": "./bin/cli.mjs",
     "add-skill": "./bin/cli.mjs"
   },
   "files": [

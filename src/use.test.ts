@@ -95,11 +95,11 @@ describe('use command', () => {
       const multiple = parseUseOptions(['source', '--agent', 'claude-code', 'codex']);
 
       expect(wildcard.errors).toContain(
-        "skills use --agent does not support '*'; specify exactly one agent."
+        "wittyhub use --agent does not support '*'; specify exactly one agent."
       );
       expect(missing.errors).toContain('--agent requires an agent name');
       expect(invalid.errors.join('\n')).toContain('Invalid agents: not-an-agent');
-      expect(multiple.errors).toContain('skills use --agent accepts exactly one agent.');
+      expect(multiple.errors).toContain('wittyhub use --agent accepts exactly one agent.');
     });
   });
 
@@ -234,7 +234,7 @@ describe('use command', () => {
       expect(result.stdout).toContain('You are being given a Skill');
       expect(result.stdout).toContain('Single skill body.');
       expect(result.stdout).not.toContain('████');
-      expect(result.stdout).not.toContain('skills add');
+      expect(result.stdout).not.toContain('wittyhub add');
     });
 
     it('includes a temp directory only when supporting files exist', () => {

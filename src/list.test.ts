@@ -343,9 +343,9 @@ description: A test skill
 
     it('should include list examples in help', () => {
       const result = runCli(['--help']);
-      expect(result.stdout).toContain('skills list');
-      expect(result.stdout).toContain('skills ls -g');
-      expect(result.stdout).toContain('skills ls -a claude-code');
+      expect(result.stdout).toContain('wittyhub list');
+      expect(result.stdout).toContain('wittyhub ls -g');
+      expect(result.stdout).toContain('wittyhub ls -a claude-code');
     });
   });
 

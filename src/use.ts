@@ -221,7 +221,7 @@ export async function runUse(
         [
           'OpenClaw skills are unverified community submissions.',
           'Skills run with full agent permissions and could be malicious.',
-          `If you understand the risks, re-run with: skills use ${source} --dangerously-accept-openclaw-risks`,
+          `If you understand the risks, re-run with: wittyhub use ${source} --dangerously-accept-openclaw-risks`,
         ].join('\n')
       );
     }
@@ -370,22 +370,22 @@ function spawnAgent(command: string, args: string[]): AgentProcess {
 }
 
 function getUseHelp(): string {
-  return `Usage: skills use <source>[@<skill>] [options]
+  return `Usage: wittyhub use <source>[@<skill>] [options]
 
 Generate a prompt for using one skill without installing it.
 
 Options:
   -s, --skill <skill>   Select the skill to use
   -a, --agent <agent>   Start one supported agent interactively (${SUPPORTED_USE_AGENTS.join(', ')})
-  --full-depth          Search nested directories like skills add --full-depth
+  --full-depth          Search nested directories like wittyhub add --full-depth
   --dangerously-accept-openclaw-risks
                          Allow unverified OpenClaw community skills
   -h, --help            Show this help message
 
 Examples:
-  skills use vercel-labs/agent-skills@web-design-guidelines | claude
-  skills use vercel-labs/agent-skills --skill web-design-guidelines --agent claude-code
-  skills use vercel-labs/agent-skills@web-design-guidelines --agent codex`;
+  wittyhub use vercel-labs/agent-skills@web-design-guidelines | claude
+  wittyhub use vercel-labs/agent-skills --skill web-design-guidelines --agent claude-code
+  wittyhub use vercel-labs/agent-skills@web-design-guidelines --agent codex`;
 }
 
 function resolveSelector(sourceSelector?: string, optionSelector?: string): string | undefined {
@@ -480,7 +480,7 @@ function formatMultipleSkillsError(source: string, names: string[]): string {
     'This source contains multiple skills. Specify exactly one skill:',
     ...names.map((name) => `  - ${name}`),
     '',
-    `Examples:\n  skills use ${source}@${names[0] ?? '<skill>'}\n  skills use ${source} --skill ${names[0] ?? '<skill>'}`,
+    `Examples:\n  wittyhub use ${source}@${names[0] ?? '<skill>'}\n  wittyhub use ${source} --skill ${names[0] ?? '<skill>'}`,
   ].join('\n');
 }
 
@@ -502,10 +502,10 @@ function validateUseAgentOption(agentValues: string[] | undefined): string[] {
   );
 
   if (agentValues.includes('*')) {
-    errors.push("skills use --agent does not support '*'; specify exactly one agent.");
+    errors.push("wittyhub use --agent does not support '*'; specify exactly one agent.");
   }
   if (agentValues.length > 1) {
-    errors.push('skills use --agent accepts exactly one agent.');
+    errors.push('wittyhub use --agent accepts exactly one agent.');
   }
   if (invalidAgents.length > 0) {
     errors.push(
@@ -519,7 +519,7 @@ function validateUseAgentOption(agentValues: string[] | undefined): string[] {
 function formatUnsupportedAgentError(agent: AgentType): string {
   return [
     `Running ${agents[agent].displayName} is not supported yet.`,
-    `Supported agents for skills use --agent: ${SUPPORTED_USE_AGENTS.join(', ')}`,
+    `Supported agents for wittyhub use --agent: ${SUPPORTED_USE_AGENTS.join(', ')}`,
   ].join('\n');
 }
 
