@@ -237,6 +237,54 @@ describe('parseSource', () => {
   });
 
   describe('Git URL fallback tests', () => {
+    it('GitCode URL - basic repo page becomes git source', () => {
+      const result = parseSource('https://gitcode.com/leon-wang2021/aet');
+      expect(result.type).toBe('git');
+      expect(result.url).toBe('https://gitcode.com/leon-wang2021/aet.git');
+      expect(result.ref).toBeUndefined();
+    });
+
+    it('GitCode URL - keeps existing .git suffix', () => {
+      const result = parseSource('https://gitcode.com/leon-wang2021/aet.git');
+      expect(result.type).toBe('git');
+      expect(result.url).toBe('https://gitcode.com/leon-wang2021/aet.git');
+    });
+
+    it('GitCode URL - with #branch', () => {
+      const result = parseSource('https://gitcode.com/leon-wang2021/aet#feature/ui');
+      expect(result.type).toBe('git');
+      expect(result.url).toBe('https://gitcode.com/leon-wang2021/aet.git');
+      expect(result.ref).toBe('feature/ui');
+    });
+
+    it('GitCode URL - tree with branch only', () => {
+      const result = parseSource('https://gitcode.com/openeuler/witty-diagnosis-agent/tree/master');
+      expect(result.type).toBe('git');
+      expect(result.url).toBe('https://gitcode.com/openeuler/witty-diagnosis-agent.git');
+      expect(result.ref).toBe('master');
+      expect(result.subpath).toBeUndefined();
+    });
+
+    it('GitCode URL - tree with branch and path', () => {
+      const result = parseSource(
+        'https://gitcode.com/openeuler/witty-diagnosis-agent/tree/master/skills'
+      );
+      expect(result.type).toBe('git');
+      expect(result.url).toBe('https://gitcode.com/openeuler/witty-diagnosis-agent.git');
+      expect(result.ref).toBe('master');
+      expect(result.subpath).toBe('skills');
+    });
+
+    it('GitCode URL - tree with nested path', () => {
+      const result = parseSource(
+        'https://gitcode.com/openeuler/witty-diagnosis-agent/tree/master/skills/ui-ux-pro-max'
+      );
+      expect(result.type).toBe('git');
+      expect(result.url).toBe('https://gitcode.com/openeuler/witty-diagnosis-agent.git');
+      expect(result.ref).toBe('master');
+      expect(result.subpath).toBe('skills/ui-ux-pro-max');
+    });
+
     it('Git URL - SSH format', () => {
       const result = parseSource('git@github.com:owner/repo.git');
       expect(result.type).toBe('git');
@@ -326,6 +374,11 @@ describe('getOwnerRepo', () => {
   it('getOwnerRepo - custom git host extracts owner/repo', () => {
     const parsed = parseSource('https://git.example.com/owner/repo.git');
     expect(getOwnerRepo(parsed)).toBe('owner/repo');
+  });
+
+  it('getOwnerRepo - GitCode URL extracts owner/repo', () => {
+    const parsed = parseSource('https://gitcode.com/leon-wang2021/aet');
+    expect(getOwnerRepo(parsed)).toBe('leon-wang2021/aet');
   });
 
   it('getOwnerRepo - SSH format extracts owner/repo', () => {

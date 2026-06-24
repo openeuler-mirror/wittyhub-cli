@@ -144,6 +144,8 @@ const SOURCE_ALIASES: Record<string, string> = {
   'coinbase/agentWallet': 'coinbase/agentic-wallet-skills',
 };
 
+const KNOWN_GIT_REPO_HOSTS = ['gitcode.com'];
+
 interface FragmentRefResult {
   inputWithoutFragment: string;
   ref?: string;
@@ -180,6 +182,10 @@ function looksLikeGitSource(input: string): boolean {
       // Only treat gitlab.com fragments as refs for repo/tree URLs.
       if (parsed.hostname === 'gitlab.com') {
         return /^\/.+?\/[^/]+(?:\.git)?(?:\/-\/tree\/[^/]+(?:\/.*)?)?\/?$/.test(pathname);
+      }
+
+      if (KNOWN_GIT_REPO_HOSTS.includes(parsed.hostname)) {
+        return /^\/[^/]+\/[^/]+(?:\.git)?(?:\/tree\/[^/]+(?:\/.*)?)?\/?$/.test(pathname);
       }
     } catch {
       // Fall through to generic checks below.
@@ -363,6 +369,53 @@ export function parseSource(input: string): ParsedSource {
     }
   }
 
+  // Known non-GitHub/GitLab git hosts with GitHub-like tree URLs.
+  // Example: https://gitcode.com/owner/repo/tree/main/path/to/skill
+  const knownGitTreeWithPathMatch = input.match(
+    /^(https?):\/\/([^/]+)\/([^/]+)\/([^/]+)\/tree\/([^/]+)\/(.+)$/
+  );
+  if (knownGitTreeWithPathMatch) {
+    const [, protocol, hostname, owner, repo, ref, subpath] = knownGitTreeWithPathMatch;
+    if (KNOWN_GIT_REPO_HOSTS.includes(hostname!.toLowerCase())) {
+      return {
+        type: 'git',
+        url: `${protocol}://${hostname}/${owner}/${repo}.git`,
+        ref: ref || fragmentRef,
+        subpath: subpath ? sanitizeSubpath(subpath) : subpath,
+      };
+    }
+  }
+
+  // Known non-GitHub/GitLab git hosts with GitHub-like branch pages.
+  const knownGitTreeMatch = input.match(
+    /^(https?):\/\/([^/]+)\/([^/]+)\/([^/]+)\/tree\/([^/]+)\/?$/
+  );
+  if (knownGitTreeMatch) {
+    const [, protocol, hostname, owner, repo, ref] = knownGitTreeMatch;
+    if (KNOWN_GIT_REPO_HOSTS.includes(hostname!.toLowerCase())) {
+      return {
+        type: 'git',
+        url: `${protocol}://${hostname}/${owner}/${repo}.git`,
+        ref: ref || fragmentRef,
+      };
+    }
+  }
+
+  // Known non-GitHub/GitLab git hosts with owner/repo URL structure.
+  // Treat plain repository page URLs as cloneable git sources instead of
+  // falling through to the well-known skills provider flow.
+  const knownGitRepoMatch = input.match(/^(https?):\/\/([^/]+)\/([^/]+)\/([^/]+?)(?:\.git)?\/?$/);
+  if (knownGitRepoMatch) {
+    const [, protocol, hostname, owner, repo] = knownGitRepoMatch;
+    if (KNOWN_GIT_REPO_HOSTS.includes(hostname!.toLowerCase())) {
+      return {
+        type: 'git',
+        url: `${protocol}://${hostname}/${owner}/${repo}.git`,
+        ...(fragmentRef ? { ref: fragmentRef } : {}),
+      };
+    }
+  }
+
   // GitHub shorthand: owner/repo, owner/repo/path/to/skill, or owner/repo@skill-name
   // Exclude paths that start with . or / to avoid matching local paths
   // First check for @skill syntax: owner/repo@skill-name
@@ -421,7 +474,12 @@ function isWellKnownUrl(input: string): boolean {
     const parsed = new URL(input);
 
     // Exclude known git hosts that have their own handling
-    const excludedHosts = ['github.com', 'gitlab.com', 'raw.githubusercontent.com'];
+    const excludedHosts = [
+      'github.com',
+      'gitlab.com',
+      'raw.githubusercontent.com',
+      ...KNOWN_GIT_REPO_HOSTS,
+    ];
     if (excludedHosts.includes(parsed.hostname)) {
       return false;
     }
