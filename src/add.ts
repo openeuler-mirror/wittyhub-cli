@@ -371,6 +371,30 @@ function buildResultLines(
   return lines;
 }
 
+function buildCopyResultLines(
+  results: Array<{
+    agent: string;
+    path: string;
+  }>,
+  cwd: string
+): string[] {
+  const lines: string[] = [];
+  const byPath = new Map<string, string[]>();
+
+  for (const result of results) {
+    const agentsForPath = byPath.get(result.path) || [];
+    agentsForPath.push(result.agent);
+    byPath.set(result.path, agentsForPath);
+  }
+
+  for (const [path, agentsForPath] of byPath) {
+    lines.push(`  ${pc.dim('→')} ${shortenPath(path, cwd)}`);
+    lines.push(`    ${pc.dim('copied to:')} ${formatList(agentsForPath)}`);
+  }
+
+  return lines;
+}
+
 /**
  * Wrapper around p.multiselect that adds a hint for keyboard usage.
  * Accepts options with required labels (matching our usage pattern).
@@ -944,12 +968,9 @@ async function handleWellKnownSkills(
       const firstResult = skillResults[0]!;
 
       if (firstResult.mode === 'copy') {
-        // Copy mode: show skill name and list all agent paths
+        // Copy mode: group identical install paths to avoid repeated output
         resultLines.push(`${pc.green('✓')} ${skillName} ${pc.dim('(copied)')}`);
-        for (const r of skillResults) {
-          const shortPath = shortenPath(r.path, cwd);
-          resultLines.push(`  ${pc.dim('→')} ${shortPath}`);
-        }
+        resultLines.push(...buildCopyResultLines(skillResults, cwd));
       } else {
         // Symlink mode: show canonical path and universal/symlinked agents
         if (firstResult.canonicalPath) {
@@ -1937,12 +1958,9 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
           const firstResult = skillResults[0]!;
 
           if (firstResult.mode === 'copy') {
-            // Copy mode: show skill name and list all agent paths
+            // Copy mode: group identical install paths to avoid repeated output
             resultLines.push(`${pc.green('✓')} ${entry.skill} ${pc.dim('(copied)')}`);
-            for (const r of skillResults) {
-              const shortPath = shortenPath(r.path, cwd);
-              resultLines.push(`  ${pc.dim('→')} ${shortPath}`);
-            }
+            resultLines.push(...buildCopyResultLines(skillResults, cwd));
           } else {
             // Symlink mode: show canonical path and universal/symlinked agents
             if (firstResult.canonicalPath) {
