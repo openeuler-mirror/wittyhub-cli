@@ -534,6 +534,10 @@ Telemetry is automatically disabled in CI environments.
 - [Trae Skills Documentation](https://docs.trae.ai/ide/skills)
 - [Vercel Agent Skills Repository](https://github.com/vercel-labs/agent-skills)
 
+## Acknowledgments
+
+This project is forked from [vercel-labs/skills](https://github.com/vercel-labs/skills). We thank the Vercel team and the original contributors for their excellent work on the agent skills ecosystem.
+
 ## License
 
 MIT
