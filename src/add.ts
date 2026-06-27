@@ -1094,7 +1094,8 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
     // telemetry gating — it should never block user-visible output.
     const ownerRepoRaw = getOwnerRepo(parsed);
     const repoPrivacyPromise: Promise<boolean | null> = (() => {
-      if (!ownerRepoRaw) return Promise.resolve(null);
+      // 限制私有仓检查只对 GitHub 生效
+      if (!ownerRepoRaw || parsed.type !== 'github') return Promise.resolve(null);
       const ownerRepo = parseOwnerRepo(ownerRepoRaw);
       if (!ownerRepo) return Promise.resolve(null);
       return isRepoPrivate(ownerRepo.owner, ownerRepo.repo).catch(() => null);
@@ -1809,9 +1810,10 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
       const ownerRepo = parseOwnerRepo(normalizedSource);
       if (ownerRepo) {
         const isPrivate = await repoPrivacyPromise;
-        // Only send telemetry if repo is public (isPrivate === false)
-        // If we can't determine (null), err on the side of caution and skip telemetry
-        if (isPrivate === false) {
+        // For GitHub repos: only send telemetry if confirmed public (isPrivate === false).
+        // For sources without a privacy check, repoPrivacyPromise returns null,
+        // so we always send telemetry.
+        if (isPrivate === false || (isPrivate === null && parsed.type !== 'github')) {
           track({
             event: 'install',
             source: normalizedSource,
