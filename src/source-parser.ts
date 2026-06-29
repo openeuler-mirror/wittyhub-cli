@@ -172,8 +172,8 @@ function looksLikeGitSource(input: string): boolean {
       const parsed = new URL(input);
       const pathname = parsed.pathname;
 
-      // Only treat GitHub fragments as refs for repo/tree URLs.
-      if (parsed.hostname === 'github.com') {
+      // Only treat GitHub-style fragments as refs for repo/tree URLs.
+      if (parsed.hostname === 'github.com' || parsed.hostname === 'gitcode.com') {
         return /^\/[^/]+\/[^/]+(?:\.git)?(?:\/tree\/[^/]+(?:\/.*)?)?\/?$/.test(pathname);
       }
 
@@ -237,6 +237,59 @@ function appendFragmentRef(input: string, ref?: string, skillFilter?: string): s
   return `${input}#${ref}${skillFilter ? `@${skillFilter}` : ''}`;
 }
 
+interface GitHubLikeHostOptions {
+  hostname: string;
+  type: 'github' | 'gitcode';
+}
+
+function parseGitHubLikeSource(
+  input: string,
+  fragmentRef: string | undefined,
+  options: GitHubLikeHostOptions
+): ParsedSource | null {
+  const treeWithPathMatch = input.match(
+    /^(https?):\/\/([^/]+)\/([^/]+)\/([^/]+)\/tree\/([^/]+)\/(.+)$/
+  );
+  if (treeWithPathMatch) {
+    const [, protocol, hostname, owner, repo, ref, subpath] = treeWithPathMatch;
+    if (hostname?.toLowerCase() === options.hostname) {
+      return {
+        type: options.type,
+        url: `${protocol}://${hostname}/${owner}/${repo}.git`,
+        ref: ref || fragmentRef,
+        subpath: subpath ? sanitizeSubpath(subpath) : subpath,
+      };
+    }
+  }
+
+  const treeMatch = input.match(/^(https?):\/\/([^/]+)\/([^/]+)\/([^/]+)\/tree\/([^/]+)\/?$/);
+  if (treeMatch) {
+    const [, protocol, hostname, owner, repo, ref] = treeMatch;
+    if (hostname?.toLowerCase() === options.hostname) {
+      return {
+        type: options.type,
+        url: `${protocol}://${hostname}/${owner}/${repo}.git`,
+        ref: ref || fragmentRef,
+      };
+    }
+  }
+
+  const repoMatch = input.match(/^(https?):\/\/([^/]+)\/([^/]+)\/([^/]+)(?:\/.*)?$/);
+  if (repoMatch) {
+    const [, protocol, hostname, owner, repo] = repoMatch;
+    if (hostname?.toLowerCase() === options.hostname) {
+      const cleanRepo = repo!.replace(/\.git$/, '');
+      return {
+        type: options.type,
+        url: `${protocol}://${hostname}/${owner}/${cleanRepo}.git`,
+        ...(fragmentRef ? { ref: fragmentRef } : {}),
+      };
+    }
+  }
+
+  return null;
+}
+
 export function parseSource(input: string): ParsedSource {
   // Local path: absolute, relative, or current directory
   if (isLocalPath(input)) {
@@ -281,39 +334,12 @@ export function parseSource(input: string): ParsedSource {
     );
   }
 
-  // GitHub URL with path: https://github.com/owner/repo/tree/branch/path/to/skill
-  const githubTreeWithPathMatch = input.match(/github\.com\/([^/]+)\/([^/]+)\/tree\/([^/]+)\/(.+)/);
-  if (githubTreeWithPathMatch) {
-    const [, owner, repo, ref, subpath] = githubTreeWithPathMatch;
-    return {
-      type: 'github',
-      url: `https://github.com/${owner}/${repo}.git`,
-      ref: ref || fragmentRef,
-      subpath: subpath ? sanitizeSubpath(subpath) : subpath,
-    };
-  }
-
-  // GitHub URL with branch only: https://github.com/owner/repo/tree/branch
-  const githubTreeMatch = input.match(/github\.com\/([^/]+)\/([^/]+)\/tree\/([^/]+)$/);
-  if (githubTreeMatch) {
-    const [, owner, repo, ref] = githubTreeMatch;
-    return {
-      type: 'github',
-      url: `https://github.com/${owner}/${repo}.git`,
-      ref: ref || fragmentRef,
-    };
-  }
-
-  // GitHub URL: https://github.com/owner/repo
-  const githubRepoMatch = input.match(/github\.com\/([^/]+)\/([^/]+)/);
-  if (githubRepoMatch) {
-    const [, owner, repo] = githubRepoMatch;
-    const cleanRepo = repo!.replace(/\.git$/, '');
-    return {
-      type: 'github',
-      url: `https://github.com/${owner}/${cleanRepo}.git`,
-      ...(fragmentRef ? { ref: fragmentRef } : {}),
-    };
+  const githubParsed = parseGitHubLikeSource(input, fragmentRef, {
+    hostname: 'github.com',
+    type: 'github',
+  });
+  if (githubParsed) {
+    return githubParsed;
   }
 
   // GitLab URL with path (any GitLab instance): https://gitlab.com/owner/repo/-/tree/branch/path
@@ -361,6 +387,14 @@ export function parseSource(input: string): ParsedSource {
         ...(fragmentRef ? { ref: fragmentRef } : {}),
       };
     }
+  }
+
+  const gitcodeParsed = parseGitHubLikeSource(input, fragmentRef, {
+    hostname: 'gitcode.com',
+    type: 'gitcode',
+  });
+  if (gitcodeParsed) {
+    return gitcodeParsed;
   }
 
   // GitHub shorthand: owner/repo, owner/repo/path/to/skill, or owner/repo@skill-name
@@ -421,7 +455,7 @@ function isWellKnownUrl(input: string): boolean {
     const parsed = new URL(input);
 
     // Exclude known git hosts that have their own handling
-    const excludedHosts = ['github.com', 'gitlab.com', 'raw.githubusercontent.com'];
+    const excludedHosts = ['github.com', 'gitlab.com', 'raw.githubusercontent.com', 'gitcode.com'];
     if (excludedHosts.includes(parsed.hostname)) {
       return false;
     }

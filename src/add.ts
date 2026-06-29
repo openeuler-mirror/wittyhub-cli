@@ -371,6 +371,30 @@ function buildResultLines(
   return lines;
 }
 
+function buildCopyResultLines(
+  results: Array<{
+    agent: string;
+    path: string;
+  }>,
+  cwd: string
+): string[] {
+  const lines: string[] = [];
+  const byPath = new Map<string, string[]>();
+
+  for (const result of results) {
+    const agentsForPath = byPath.get(result.path) || [];
+    agentsForPath.push(result.agent);
+    byPath.set(result.path, agentsForPath);
+  }
+
+  for (const [path, agentsForPath] of byPath) {
+    lines.push(`  ${pc.dim('→')} ${shortenPath(path, cwd)}`);
+    lines.push(`    ${pc.dim('copied to:')} ${formatList(agentsForPath)}`);
+  }
+
+  return lines;
+}
+
 /**
  * Wrapper around p.multiselect that adds a hint for keyboard usage.
  * Accepts options with required labels (matching our usage pattern).
@@ -944,12 +968,9 @@ async function handleWellKnownSkills(
       const firstResult = skillResults[0]!;
 
       if (firstResult.mode === 'copy') {
-        // Copy mode: show skill name and list all agent paths
+        // Copy mode: group identical install paths to avoid repeated output
         resultLines.push(`${pc.green('✓')} ${skillName} ${pc.dim('(copied)')}`);
-        for (const r of skillResults) {
-          const shortPath = shortenPath(r.path, cwd);
-          resultLines.push(`  ${pc.dim('→')} ${shortPath}`);
-        }
+        resultLines.push(...buildCopyResultLines(skillResults, cwd));
       } else {
         // Symlink mode: show canonical path and universal/symlinked agents
         if (firstResult.canonicalPath) {
@@ -1012,10 +1033,12 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
     );
     console.log();
     console.log(pc.dim('  Usage:'));
-    console.log(`    ${pc.cyan('npx skills add')} ${pc.yellow('<source>')} ${pc.dim('[options]')}`);
+    console.log(
+      `    ${pc.cyan('npx wittyhub add')} ${pc.yellow('<source>')} ${pc.dim('[options]')}`
+    );
     console.log();
     console.log(pc.dim('  Example:'));
-    console.log(`    ${pc.cyan('npx skills add')} ${pc.yellow('vercel-labs/agent-skills')}`);
+    console.log(`    ${pc.cyan('npx wittyhub add')} ${pc.yellow('vercel-labs/agent-skills')}`);
     console.log();
     process.exit(1);
   }
@@ -1071,7 +1094,8 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
     // telemetry gating — it should never block user-visible output.
     const ownerRepoRaw = getOwnerRepo(parsed);
     const repoPrivacyPromise: Promise<boolean | null> = (() => {
-      if (!ownerRepoRaw) return Promise.resolve(null);
+      // 限制私有仓检查只对 GitHub 生效
+      if (!ownerRepoRaw || parsed.type !== 'github') return Promise.resolve(null);
       const ownerRepo = parseOwnerRepo(ownerRepoRaw);
       if (!ownerRepo) return Promise.resolve(null);
       return isRepoPrivate(ownerRepo.owner, ownerRepo.repo).catch(() => null);
@@ -1090,7 +1114,7 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
       p.log.message(pc.yellow('Skills run with full agent permissions and could be malicious.'));
       console.log();
       p.log.message(
-        `If you understand the risks, re-run with:\n\n  ${pc.cyan(`npx skills add ${source} --dangerously-accept-openclaw-risks`)}\n`
+        `If you understand the risks, re-run with:\n\n  ${pc.cyan(`npx wittyhub add ${source} --dangerously-accept-openclaw-risks`)}\n`
       );
       p.outro(pc.red('Installation blocked'));
       process.exit(1);
@@ -1786,9 +1810,10 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
       const ownerRepo = parseOwnerRepo(normalizedSource);
       if (ownerRepo) {
         const isPrivate = await repoPrivacyPromise;
-        // Only send telemetry if repo is public (isPrivate === false)
-        // If we can't determine (null), err on the side of caution and skip telemetry
-        if (isPrivate === false) {
+        // For GitHub repos: only send telemetry if confirmed public (isPrivate === false).
+        // For sources without a privacy check, repoPrivacyPromise returns null,
+        // so we always send telemetry.
+        if (isPrivate === false || (isPrivate === null && parsed.type !== 'github')) {
           track({
             event: 'install',
             source: normalizedSource,
@@ -1935,12 +1960,9 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
           const firstResult = skillResults[0]!;
 
           if (firstResult.mode === 'copy') {
-            // Copy mode: show skill name and list all agent paths
+            // Copy mode: group identical install paths to avoid repeated output
             resultLines.push(`${pc.green('✓')} ${entry.skill} ${pc.dim('(copied)')}`);
-            for (const r of skillResults) {
-              const shortPath = shortenPath(r.path, cwd);
-              resultLines.push(`  ${pc.dim('→')} ${shortPath}`);
-            }
+            resultLines.push(...buildCopyResultLines(skillResults, cwd));
           } else {
             // Symlink mode: show canonical path and universal/symlinked agents
             if (firstResult.canonicalPath) {
@@ -2096,13 +2118,13 @@ async function promptForFindSkills(
         });
       } catch {
         p.log.warn('Failed to install find-skills. You can try again with:');
-        p.log.message(pc.dim('  npx skills add vercel-labs/skills@find-skills -g -y --all'));
+        p.log.message(pc.dim('  npx wittyhub add vercel-labs/skills@find-skills -g -y --all'));
       }
     } else {
       // User declined - dismiss the prompt
       await dismissPrompt('findSkillsPrompt');
       p.log.message(
-        pc.dim('You can install it later with: npx skills add vercel-labs/skills@find-skills')
+        pc.dim('You can install it later with: npx wittyhub add vercel-labs/skills@find-skills')
       );
     }
   } catch {

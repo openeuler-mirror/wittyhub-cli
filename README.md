@@ -1,4 +1,4 @@
-# skills
+# wittyhub-cli
 
 The CLI for the open agent skills ecosystem.
 
@@ -11,7 +11,7 @@ Supports **OpenCode**, **Claude Code**, **Codex**, **Cursor**, and [68 more](#su
 ## Install a Skill
 
 ```bash
-npx skills add vercel-labs/agent-skills
+npx wittyhub add vercel-labs/agent-skills
 ```
 
 ## Use a Skill Without Installing
@@ -19,32 +19,32 @@ npx skills add vercel-labs/agent-skills
 Generate a prompt for one skill, or start a supported coding agent interactively:
 
 ```bash
-npx skills use vercel-labs/agent-skills@web-design-guidelines | claude
-npx skills use vercel-labs/agent-skills --skill web-design-guidelines --agent claude-code
+npx wittyhub use vercel-labs/agent-skills@web-design-guidelines | claude
+npx wittyhub use vercel-labs/agent-skills --skill web-design-guidelines --agent claude-code
 ```
 
-`skills use` resolves sources the same way as `skills add`, writes the selected skill files to a temporary directory, and prints only the generated prompt to stdout unless `--agent` is provided. With `--agent`, it starts one supported agent interactively with the generated prompt.
+`wittyhub use` resolves sources the same way as `wittyhub add`, writes the selected skill files to a temporary directory, and prints only the generated prompt to stdout unless `--agent` is provided. With `--agent`, it starts one supported agent interactively with the generated prompt.
 
 ### Source Formats
 
 ```bash
 # GitHub shorthand (owner/repo)
-npx skills add vercel-labs/agent-skills
+npx wittyhub add vercel-labs/agent-skills
 
 # Full GitHub URL
-npx skills add https://github.com/vercel-labs/agent-skills
+npx wittyhub add https://github.com/vercel-labs/agent-skills
 
 # Direct path to a skill in a repo
-npx skills add https://github.com/vercel-labs/agent-skills/tree/main/skills/web-design-guidelines
+npx wittyhub add https://github.com/vercel-labs/agent-skills/tree/main/skills/web-design-guidelines
 
 # GitLab URL
-npx skills add https://gitlab.com/org/repo
+npx wittyhub add https://gitlab.com/org/repo
 
 # Any git URL
-npx skills add git@github.com:vercel-labs/agent-skills.git
+npx wittyhub add git@github.com:vercel-labs/agent-skills.git
 
 # Local path
-npx skills add ./my-local-skills
+npx wittyhub add ./my-local-skills
 ```
 
 ### Options
@@ -63,28 +63,28 @@ npx skills add ./my-local-skills
 
 ```bash
 # List skills in a repository
-npx skills add vercel-labs/agent-skills --list
+npx wittyhub add vercel-labs/agent-skills --list
 
 # Install specific skills
-npx skills add vercel-labs/agent-skills --skill frontend-design --skill skill-creator
+npx wittyhub add vercel-labs/agent-skills --skill frontend-design --skill skill-creator
 
 # Install a skill with spaces in the name (must be quoted)
-npx skills add owner/repo --skill "Convex Best Practices"
+npx wittyhub add owner/repo --skill "Convex Best Practices"
 
 # Install to specific agents
-npx skills add vercel-labs/agent-skills -a claude-code -a opencode
+npx wittyhub add vercel-labs/agent-skills -a claude-code -a opencode
 
 # Non-interactive installation (CI/CD friendly)
-npx skills add vercel-labs/agent-skills --skill frontend-design -g -a claude-code -y
+npx wittyhub add vercel-labs/agent-skills --skill frontend-design -g -a claude-code -y
 
 # Install all skills from a repo to all agents
-npx skills add vercel-labs/agent-skills --all
+npx wittyhub add vercel-labs/agent-skills --all
 
 # Install all skills to specific agents
-npx skills add vercel-labs/agent-skills --skill '*' -a claude-code
+npx wittyhub add vercel-labs/agent-skills --skill '*' -a claude-code
 
 # Install specific skills to all agents
-npx skills add vercel-labs/agent-skills --agent '*' --skill frontend-design
+npx wittyhub add vercel-labs/agent-skills --agent '*' --skill frontend-design
 ```
 
 ### Installation Scope
@@ -107,61 +107,61 @@ When installing interactively, you can choose:
 
 | Command                      | Description                                   |
 | ---------------------------- | --------------------------------------------- |
-| `npx skills use <source>`    | Use one skill without installing              |
-| `npx skills list`            | List installed skills (alias: `ls`)           |
-| `npx skills find [query]`    | Search for skills interactively or by keyword |
-| `npx skills remove [skills]` | Remove installed skills from agents           |
-| `npx skills update [skills]` | Update installed skills to latest versions    |
-| `npx skills init [name]`     | Create a new SKILL.md template                |
+| `npx wittyhub use <source>`    | Use one skill without installing              |
+| `npx wittyhub list`            | List installed skills (alias: `ls`)           |
+| `npx wittyhub find [query]`    | Search for skills interactively or by keyword |
+| `npx wittyhub remove [skills]` | Remove installed skills from agents           |
+| `npx wittyhub update [skills]` | Update installed skills to latest versions    |
+| `npx wittyhub init [name]`     | Create a new SKILL.md template                |
 
-### `skills list`
+### `wittyhub list`
 
 List all installed skills. Similar to `npm ls`.
 
 ```bash
 # List all installed skills (project and global)
-npx skills list
+npx wittyhub list
 
 # List only global skills
-npx skills ls -g
+npx wittyhub ls -g
 
 # Filter by specific agents
-npx skills ls -a claude-code -a cursor
+npx wittyhub ls -a claude-code -a cursor
 ```
 
-### `skills find`
+### `wittyhub find`
 
 Search for skills interactively or by keyword.
 
 ```bash
 # Interactive search (fzf-style)
-npx skills find
+npx wittyhub find
 
 # Search by keyword
-npx skills find typescript
+npx wittyhub find typescript
 
 # Search across every repository owned by an organization or user
-npx skills find react --owner vercel
+npx wittyhub find react --owner vercel
 ```
 
-### `skills update`
+### `wittyhub update`
 
 ```bash
 # Update all skills (interactive scope prompt)
-npx skills update
+npx wittyhub update
 
 # Update a single skill by name
-npx skills update my-skill
+npx wittyhub update my-skill
 
 # Update multiple specific skills
-npx skills update frontend-design web-design-guidelines
+npx wittyhub update frontend-design web-design-guidelines
 
 # Update only global or project skills
-npx skills update -g
-npx skills update -p
+npx wittyhub update -g
+npx wittyhub update -p
 
 # Non-interactive (auto-detects scope: project if in a project, else global)
-npx skills update -y
+npx wittyhub update -y
 ```
 
 | Option          | Description                                                               |
@@ -171,47 +171,47 @@ npx skills update -y
 | `-y, --yes`     | Skip scope prompt (auto-detect: project if in a project dir, else global) |
 | `[skills...]`   | Update specific skills by name instead of all                             |
 
-### `skills init`
+### `wittyhub init`
 
 ```bash
 # Create SKILL.md in current directory
-npx skills init
+npx wittyhub init
 
 # Create a new skill in a subdirectory
-npx skills init my-skill
+npx wittyhub init my-skill
 ```
 
-### `skills remove`
+### `wittyhub remove`
 
 Remove installed skills from agents.
 
 ```bash
 # Remove interactively (select from installed skills)
-npx skills remove
+npx wittyhub remove
 
 # Remove specific skill by name
-npx skills remove web-design-guidelines
+npx wittyhub remove web-design-guidelines
 
 # Remove multiple skills
-npx skills remove frontend-design web-design-guidelines
+npx wittyhub remove frontend-design web-design-guidelines
 
 # Remove from global scope
-npx skills remove --global web-design-guidelines
+npx wittyhub remove --global web-design-guidelines
 
 # Remove from specific agents only
-npx skills remove --agent claude-code cursor my-skill
+npx wittyhub remove --agent claude-code cursor my-skill
 
 # Remove all installed skills without confirmation
-npx skills remove --all
+npx wittyhub remove --all
 
 # Remove all skills from a specific agent
-npx skills remove --skill '*' -a cursor
+npx wittyhub remove --skill '*' -a cursor
 
 # Remove a specific skill from all agents
-npx skills remove my-skill --agent '*'
+npx wittyhub remove my-skill --agent '*'
 
 # Use 'rm' alias
-npx skills rm my-skill
+npx wittyhub rm my-skill
 ```
 
 | Option         | Description                                      |
@@ -493,7 +493,7 @@ Ensure you have write access to the target directory.
 
 ```bash
 # Install internal skills
-INSTALL_INTERNAL_SKILLS=1 npx skills add vercel-labs/agent-skills --list
+INSTALL_INTERNAL_SKILLS=1 npx wittyhub add vercel-labs/agent-skills --list
 ```
 
 ## Telemetry
@@ -533,6 +533,10 @@ Telemetry is automatically disabled in CI environments.
 - [Roo Code Skills Documentation](https://docs.roocode.com/features/skills)
 - [Trae Skills Documentation](https://docs.trae.ai/ide/skills)
 - [Vercel Agent Skills Repository](https://github.com/vercel-labs/agent-skills)
+
+## Acknowledgments
+
+This project is forked from [vercel-labs/skills](https://github.com/vercel-labs/skills). We thank the Vercel team and the original contributors for their excellent work on the agent skills ecosystem.
 
 ## License
 

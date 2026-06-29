@@ -7,7 +7,7 @@ describe('skills CLI', () => {
   describe('--help', () => {
     it('should display help message', () => {
       const output = runCliOutput(['--help']);
-      expect(output).toContain('Usage: skills <command> [options]');
+      expect(output).toContain('Usage: wittyhub <command> [options]');
       expect(output).toContain('Manage Skills:');
       expect(output).toContain('init [name]');
       expect(output).toContain('add <package>');
@@ -69,10 +69,10 @@ describe('skills CLI', () => {
       });
       const output = stripLogo(result.stdout);
       expect(output).toContain('The open agent skills ecosystem');
-      expect(output).toContain('npx skills add');
-      expect(output).toContain('npx skills use');
-      expect(output).toContain('npx skills update');
-      expect(output).toContain('npx skills init');
+      expect(output).toContain('npx wittyhub add');
+      expect(output).toContain('npx wittyhub use');
+      expect(output).toContain('npx wittyhub update');
+      expect(output).toContain('npx wittyhub init');
       expect(output).toContain('skills.sh');
     });
   });
@@ -82,7 +82,7 @@ describe('skills CLI', () => {
       const output = runCliOutput(['unknown-command']);
       expect(output).toMatchInlineSnapshot(`
         "Unknown command: unknown-command
-        Run skills --help for usage.
+        Run wittyhub --help for usage.
         "
       `);
     });

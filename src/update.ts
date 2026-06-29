@@ -217,7 +217,7 @@ export function printSkippedSkills(skipped: SkippedSkill[]): void {
       const names = skills.map((s) => sanitizeMetadata(s.name)).join(', ');
       console.log(`  ${TEXT}•${RESET} ${names} ${DIM}(${reason})${RESET}`);
     }
-    console.log(`    ${DIM}To update: ${TEXT}npx skills add ${source} -g -y${RESET}`);
+    console.log(`    ${DIM}To update: ${TEXT}npx wittyhub add ${source} -g -y${RESET}`);
   }
 }
 
@@ -292,7 +292,7 @@ export async function updateGlobalSkills(
   if (skillNames.length === 0) {
     if (!options.skills) {
       console.log(`${DIM}No global skills tracked in lock file.${RESET}`);
-      console.log(`${DIM}Install skills with${RESET} ${TEXT}npx skills add <package> -g${RESET}`);
+      console.log(`${DIM}Install skills with${RESET} ${TEXT}npx wittyhub add <package> -g${RESET}`);
     }
     return { successCount, failCount, checkedCount: 0 };
   }
@@ -483,7 +483,7 @@ export async function updateProjectSkills(
     if (!options.skills) {
       console.log(`${DIM}No project skills to update.${RESET}`);
       console.log(
-        `${DIM}Install project skills with${RESET} ${TEXT}npx skills add <package>${RESET}`
+        `${DIM}Install project skills with${RESET} ${TEXT}npx wittyhub add <package>${RESET}`
       );
     }
     return { successCount, failCount, foundCount: 0 };
@@ -627,7 +627,7 @@ export function printLegacyProjectSkills(
   for (const skill of legacy) {
     const reinstall = formatSourceInput(skill.entry.source, skill.entry.ref);
     console.log(`  ${TEXT}•${RESET} ${sanitizeMetadata(skill.name)}`);
-    console.log(`    ${DIM}To refresh: ${TEXT}npx skills add ${reinstall} -y${RESET}`);
+    console.log(`    ${DIM}To refresh: ${TEXT}npx wittyhub add ${reinstall} -y${RESET}`);
   }
 }
 

@@ -36,12 +36,12 @@ const DIM = '\x1b[38;5;102m'; // darker gray for secondary text
 const TEXT = '\x1b[38;5;145m'; // lighter gray for primary text
 
 const LOGO_LINES = [
-  '███████╗██╗  ██╗██╗██╗     ██╗     ███████╗',
-  '██╔════╝██║ ██╔╝██║██║     ██║     ██╔════╝',
-  '███████╗█████╔╝ ██║██║     ██║     ███████╗',
-  '╚════██║██╔═██╗ ██║██║     ██║     ╚════██║',
-  '███████║██║  ██╗██║███████╗███████╗███████║',
-  '╚══════╝╚═╝  ╚═╝╚═╝╚══════╝╚══════╝╚══════╝',
+  '██╗    ██╗██╗████████╗████████╗██╗   ██╗██╗  ██╗██╗   ██╗██████╗ ',
+  '██║    ██║██║╚══██╔══╝╚══██╔══╝╚██╗ ██╔╝██║  ██║██║   ██║██╔══██╗',
+  '██║ █╗ ██║██║   ██║      ██║    ╚████╔╝ ███████║██║   ██║██████╔╝',
+  '██║███╗██║██║   ██║      ██║     ╚██╔╝  ██╔══██║██║   ██║██╔══██╗',
+  '╚███╔███╔╝██║   ██║      ██║      ██║   ██║  ██║╚██████╔╝██████╔╝',
+  ' ╚══╝╚══╝ ╚═╝   ╚═╝      ╚═╝      ╚═╝   ╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ',
 ];
 
 // 256-color middle grays - visible on both light and dark backgrounds
@@ -67,36 +67,36 @@ function showBanner(): void {
   console.log(`${DIM}The open agent skills ecosystem${RESET}`);
   console.log();
   console.log(
-    `  ${DIM}$${RESET} ${TEXT}npx skills add ${DIM}<package>${RESET}        ${DIM}Add a new skill${RESET}`
+    `  ${DIM}$${RESET} ${TEXT}npx wittyhub add ${DIM}<package>${RESET}        ${DIM}Add a new skill${RESET}`
   );
   console.log(
-    `  ${DIM}$${RESET} ${TEXT}npx skills use ${DIM}<package>@<skill>${RESET} ${DIM}Use a skill without installing${RESET}`
+    `  ${DIM}$${RESET} ${TEXT}npx wittyhub use ${DIM}<package>@<skill>${RESET} ${DIM}Use a skill without installing${RESET}`
   );
   console.log(
-    `  ${DIM}$${RESET} ${TEXT}npx skills remove${RESET}               ${DIM}Remove installed skills${RESET}`
+    `  ${DIM}$${RESET} ${TEXT}npx wittyhub remove${RESET}               ${DIM}Remove installed skills${RESET}`
   );
   console.log(
-    `  ${DIM}$${RESET} ${TEXT}npx skills list${RESET}                 ${DIM}List installed skills${RESET}`
+    `  ${DIM}$${RESET} ${TEXT}npx wittyhub list${RESET}                 ${DIM}List installed skills${RESET}`
   );
   console.log(
-    `  ${DIM}$${RESET} ${TEXT}npx skills find ${DIM}[query]${RESET}         ${DIM}Search for skills${RESET}`
+    `  ${DIM}$${RESET} ${TEXT}npx wittyhub find ${DIM}[query]${RESET}         ${DIM}Search for skills${RESET}`
   );
   console.log();
   console.log(
-    `  ${DIM}$${RESET} ${TEXT}npx skills update${RESET}               ${DIM}Update installed skills${RESET}`
+    `  ${DIM}$${RESET} ${TEXT}npx wittyhub update${RESET}               ${DIM}Update installed skills${RESET}`
   );
   console.log();
   console.log(
-    `  ${DIM}$${RESET} ${TEXT}npx skills experimental_install${RESET} ${DIM}Restore from skills-lock.json${RESET}`
+    `  ${DIM}$${RESET} ${TEXT}npx wittyhub experimental_install${RESET} ${DIM}Restore from skills-lock.json${RESET}`
   );
   console.log(
-    `  ${DIM}$${RESET} ${TEXT}npx skills init ${DIM}[name]${RESET}          ${DIM}Create a new skill${RESET}`
+    `  ${DIM}$${RESET} ${TEXT}npx wittyhub init ${DIM}[name]${RESET}          ${DIM}Create a new skill${RESET}`
   );
   console.log(
-    `  ${DIM}$${RESET} ${TEXT}npx skills experimental_sync${RESET}    ${DIM}Sync skills from node_modules${RESET}`
+    `  ${DIM}$${RESET} ${TEXT}npx wittyhub experimental_sync${RESET}    ${DIM}Sync skills from node_modules${RESET}`
   );
   console.log();
-  console.log(`${DIM}try:${RESET} npx skills add vercel-labs/agent-skills`);
+  console.log(`${DIM}try:${RESET} npx wittyhub add vercel-labs/agent-skills`);
   console.log();
   console.log(`Discover more skills at ${TEXT}https://skills.sh/${RESET}`);
   console.log();
@@ -104,7 +104,7 @@ function showBanner(): void {
 
 function showHelp(): void {
   console.log(`
-${BOLD}Usage:${RESET} skills <command> [options]
+${BOLD}Usage:${RESET} wittyhub <command> [options]
 
 ${BOLD}Manage Skills:${RESET}
   add <package>        Add a skill package (alias: a)
@@ -171,29 +171,29 @@ ${BOLD}Options:${RESET}
   --version, -v     Show version number
 
 ${BOLD}Examples:${RESET}
-  ${DIM}$${RESET} skills add vercel-labs/agent-skills
-  ${DIM}$${RESET} skills use vercel-labs/agent-skills@vercel-optimize | claude
-  ${DIM}$${RESET} skills use vercel-labs/agent-skills --skill vercel-optimize --agent claude-code
-  ${DIM}$${RESET} skills add vercel-labs/agent-skills -g
-  ${DIM}$${RESET} skills add vercel-labs/agent-skills --agent claude-code cursor
-  ${DIM}$${RESET} skills add vercel-labs/agent-skills --skill pr-review commit
-  ${DIM}$${RESET} skills remove                        ${DIM}# interactive remove${RESET}
-  ${DIM}$${RESET} skills remove web-design             ${DIM}# remove by name${RESET}
-  ${DIM}$${RESET} skills rm --global frontend-design
-  ${DIM}$${RESET} skills list                          ${DIM}# list project skills${RESET}
-  ${DIM}$${RESET} skills ls -g                         ${DIM}# list global skills${RESET}
-  ${DIM}$${RESET} skills ls -a claude-code             ${DIM}# filter by agent${RESET}
-  ${DIM}$${RESET} skills ls --json                      ${DIM}# JSON output${RESET}
-  ${DIM}$${RESET} skills find                          ${DIM}# interactive search${RESET}
-  ${DIM}$${RESET} skills find typescript               ${DIM}# search by keyword${RESET}
-  ${DIM}$${RESET} skills find react --owner vercel     ${DIM}# search within an owner${RESET}
-  ${DIM}$${RESET} skills update
-  ${DIM}$${RESET} skills update my-skill             ${DIM}# update a single skill${RESET}
-  ${DIM}$${RESET} skills update -g                    ${DIM}# update global skills only${RESET}
-  ${DIM}$${RESET} skills experimental_install            ${DIM}# restore from skills-lock.json${RESET}
-  ${DIM}$${RESET} skills init my-skill
-  ${DIM}$${RESET} skills experimental_sync              ${DIM}# sync from node_modules${RESET}
-  ${DIM}$${RESET} skills experimental_sync -y           ${DIM}# sync without prompts${RESET}
+  ${DIM}$${RESET} wittyhub add vercel-labs/agent-skills
+  ${DIM}$${RESET} wittyhub use vercel-labs/agent-skills@vercel-optimize | claude
+  ${DIM}$${RESET} wittyhub use vercel-labs/agent-skills --skill vercel-optimize --agent claude-code
+  ${DIM}$${RESET} wittyhub add vercel-labs/agent-skills -g
+  ${DIM}$${RESET} wittyhub add vercel-labs/agent-skills --agent claude-code cursor
+  ${DIM}$${RESET} wittyhub add vercel-labs/agent-skills --skill pr-review commit
+  ${DIM}$${RESET} wittyhub remove                        ${DIM}# interactive remove${RESET}
+  ${DIM}$${RESET} wittyhub remove web-design             ${DIM}# remove by name${RESET}
+  ${DIM}$${RESET} wittyhub rm --global frontend-design
+  ${DIM}$${RESET} wittyhub list                          ${DIM}# list project skills${RESET}
+  ${DIM}$${RESET} wittyhub ls -g                         ${DIM}# list global skills${RESET}
+  ${DIM}$${RESET} wittyhub ls -a claude-code             ${DIM}# filter by agent${RESET}
+  ${DIM}$${RESET} wittyhub ls --json                      ${DIM}# JSON output${RESET}
+  ${DIM}$${RESET} wittyhub find                          ${DIM}# interactive search${RESET}
+  ${DIM}$${RESET} wittyhub find typescript               ${DIM}# search by keyword${RESET}
+  ${DIM}$${RESET} wittyhub find react --owner vercel     ${DIM}# search within an owner${RESET}
+  ${DIM}$${RESET} wittyhub update
+  ${DIM}$${RESET} wittyhub update my-skill             ${DIM}# update a single skill${RESET}
+  ${DIM}$${RESET} wittyhub update -g                    ${DIM}# update global skills only${RESET}
+  ${DIM}$${RESET} wittyhub experimental_install            ${DIM}# restore from skills-lock.json${RESET}
+  ${DIM}$${RESET} wittyhub init my-skill
+  ${DIM}$${RESET} wittyhub experimental_sync              ${DIM}# sync from node_modules${RESET}
+  ${DIM}$${RESET} wittyhub experimental_sync -y           ${DIM}# sync without prompts${RESET}
 
 Discover more skills at ${TEXT}https://skills.sh/${RESET}
 `);
@@ -201,7 +201,7 @@ Discover more skills at ${TEXT}https://skills.sh/${RESET}
 
 function showRemoveHelp(): void {
   console.log(`
-${BOLD}Usage:${RESET} skills remove [skills...] [options]
+${BOLD}Usage:${RESET} wittyhub remove [skills...] [options]
 
 ${BOLD}Description:${RESET}
   Remove installed skills from agents. If no skill names are provided,
@@ -218,13 +218,13 @@ ${BOLD}Options:${RESET}
   --all              Shorthand for --skill '*' --agent '*' -y
 
 ${BOLD}Examples:${RESET}
-  ${DIM}$${RESET} skills remove                           ${DIM}# interactive selection${RESET}
-  ${DIM}$${RESET} skills remove my-skill                   ${DIM}# remove specific skill${RESET}
-  ${DIM}$${RESET} skills remove skill1 skill2 -y           ${DIM}# remove multiple skills${RESET}
-  ${DIM}$${RESET} skills remove --global my-skill          ${DIM}# remove from global scope${RESET}
-  ${DIM}$${RESET} skills rm --agent claude-code my-skill   ${DIM}# remove from specific agent${RESET}
-  ${DIM}$${RESET} skills remove --all                      ${DIM}# remove all skills${RESET}
-  ${DIM}$${RESET} skills remove --skill '*' -a cursor      ${DIM}# remove all skills from cursor${RESET}
+  ${DIM}$${RESET} wittyhub remove                           ${DIM}# interactive selection${RESET}
+  ${DIM}$${RESET} wittyhub remove my-skill                   ${DIM}# remove specific skill${RESET}
+  ${DIM}$${RESET} wittyhub remove skill1 skill2 -y           ${DIM}# remove multiple skills${RESET}
+  ${DIM}$${RESET} wittyhub remove --global my-skill          ${DIM}# remove from global scope${RESET}
+  ${DIM}$${RESET} wittyhub rm --agent claude-code my-skill   ${DIM}# remove from specific agent${RESET}
+  ${DIM}$${RESET} wittyhub remove --all                      ${DIM}# remove all skills${RESET}
+  ${DIM}$${RESET} wittyhub remove --skill '*' -a cursor      ${DIM}# remove all skills from cursor${RESET}
 
 Discover more skills at ${TEXT}https://skills.sh/${RESET}
 `);
@@ -283,10 +283,10 @@ Describe when this skill should be used.
   console.log();
   console.log(`${DIM}Publishing:${RESET}`);
   console.log(
-    `  ${DIM}GitHub:${RESET}  Push to a repo, then ${TEXT}npx skills add <owner>/<repo>${RESET}`
+    `  ${DIM}GitHub:${RESET}  Push to a repo, then ${TEXT}npx wittyhub add <owner>/<repo>${RESET}`
   );
   console.log(
-    `  ${DIM}URL:${RESET}     Host the file, then ${TEXT}npx skills add https://example.com/${displayPath}${RESET}`
+    `  ${DIM}URL:${RESET}     Host the file, then ${TEXT}npx wittyhub add https://example.com/${displayPath}${RESET}`
   );
   console.log();
   console.log(`Browse existing skills for inspiration at ${TEXT}https://skills.sh/${RESET}`);
@@ -385,7 +385,7 @@ async function main(): Promise<void> {
 
     default:
       console.log(`Unknown command: ${command}`);
-      console.log(`Run ${BOLD}skills --help${RESET} for usage.`);
+      console.log(`Run ${BOLD}wittyhub --help${RESET} for usage.`);
   }
 }
 
