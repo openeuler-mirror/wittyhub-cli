@@ -203,6 +203,9 @@ function formatList(items: string[], maxShow: number = 5): string {
   return `${shown.join(', ')} +${remaining} more`;
 }
 
+// 临时关闭审计请求。等 fetchAuditData 及其后端审计能力完善后，再改回 true。
+const ENABLE_AUDIT_FETCH = false;
+
 /**
  * Splits agents into universal and non-universal (symlinked) groups.
  * Returns display names for each group.
@@ -1364,15 +1367,16 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
       selectedSkills = selected as Skill[];
     }
 
-    // Kick off security audit fetch early (non-blocking) so it runs
-    // in parallel with agent selection, scope, and mode prompts.
+    // 这里先保留原来的审计调用逻辑，但通过开关临时关闭。
+    // 等审计能力完善后，只需要修改 ENABLE_AUDIT_FETCH 即可恢复。
     const ownerRepoForAudit = getOwnerRepo(parsed);
-    const auditPromise = ownerRepoForAudit
-      ? fetchAuditData(
-          ownerRepoForAudit,
-          selectedSkills.map((s) => getSkillDisplayName(s))
-        )
-      : Promise.resolve(null);
+    const auditPromise =
+      ENABLE_AUDIT_FETCH && ownerRepoForAudit
+        ? fetchAuditData(
+            ownerRepoForAudit,
+            selectedSkills.map((s) => getSkillDisplayName(s))
+          )
+        : Promise.resolve(null);
 
     let targetAgents: AgentType[];
     const validAgents = Object.keys(agents);
@@ -1821,6 +1825,7 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
             agents: targetAgents.join(','),
             ...(installGlobally && { global: '1' }),
             skillFiles: JSON.stringify(skillFiles),
+            sourceType: parsed.type,
           });
         }
       } else {
@@ -1832,6 +1837,7 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
           agents: targetAgents.join(','),
           ...(installGlobally && { global: '1' }),
           skillFiles: JSON.stringify(skillFiles),
+          sourceType: parsed.type,
         });
       }
     }
