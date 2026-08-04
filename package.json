@@ -1,6 +1,6 @@
 {
   "name": "wittyhub",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "The open agent skills ecosystem",
   "type": "module",
   "bin": {
@@ -111,7 +111,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://gitcode.com/openeuler/wittyhub-cli.git"
+    "url": "https://gitcode.com/openeuler/wittyhub-cli.git"
   },
   "homepage": "https://gitcode.com/openeuler/wittyhub-cli",
   "bugs": {
