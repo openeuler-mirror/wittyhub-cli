@@ -1,17 +1,17 @@
 import { loadCliConfig } from './config.ts';
 
 const DEFAULT_TELEMETRY_URL = 'http://localhost:8080/api/v1/skills/telemetry';
-const DEFAULT_AUDIT_URL = 'http://localhost:8080/api/v1/skills/audit';
+const DEFAULT_AUDIT_BASE = 'http://localhost:8080/api/v1/skills';
 
 const cliConfig = loadCliConfig();
 const TELEMETRY_URL =
   typeof cliConfig.telemetry_url === 'string' && cliConfig.telemetry_url.trim()
     ? cliConfig.telemetry_url.trim()
     : DEFAULT_TELEMETRY_URL;
-const AUDIT_URL =
+const AUDIT_BASE =
   typeof cliConfig.audit_url === 'string' && cliConfig.audit_url.trim()
-    ? cliConfig.audit_url.trim()
-    : DEFAULT_AUDIT_URL;
+    ? cliConfig.audit_url.trim().replace(/\/+$/, '')
+    : DEFAULT_AUDIT_BASE;
 
 interface InstallTelemetryData {
   event: 'install';
@@ -119,12 +119,49 @@ export interface SkillAuditResult {
 export type AuditResponse = Record<string, SkillAuditResult>;
 
 /**
- * Fetch security audit results for skills from the batch audit API.
+ * Derive the same skill_id that the server uses for telemetry/audit lookups,
+ * matching the Python ``build_skill_id_from_telemetry`` logic.
+ */
+function slugifyTelemetryValue(value: string): string {
+  const lowered = value.trim().toLowerCase();
+  if (!lowered) return '';
+  let normalized = lowered.replace(/[^a-z0-9._-]+/g, '-');
+  normalized = normalized.replace(/-{2,}/g, '-');
+  return normalized.replace(/^-|-$/g, '');
+}
+
+function buildSkillId(
+  sourceType: string,
+  ownerRepo: string,
+  skillName: string,
+  skillFiles?: Record<string, string>
+): string | null {
+  if (!['github', 'gitcode', 'gitlab', 'gitee'].includes(sourceType)) return null;
+  if (!ownerRepo) return null;
+
+  if (skillFiles) {
+    const relativePath = skillFiles[skillName];
+    if (relativePath) {
+      const normalizedPath = relativePath.trim().replace(/\\/g, '/').replace(/\/+$/, '');
+      if (normalizedPath === 'SKILL.md') {
+        const skillPath = ownerRepo.split('/').pop()!;
+        return `${sourceType}/${ownerRepo}/${skillPath}`;
+      }
+      if (normalizedPath.endsWith('/SKILL.md')) {
+        const skillPath = normalizedPath.slice(0, -'/SKILL.md'.length);
+        return `${sourceType}/${ownerRepo}/${skillPath}`;
+      }
+    }
+  }
+
+  const skillPath = slugifyTelemetryValue(skillName);
+  if (!skillPath) return null;
+  return `${sourceType}/${ownerRepo}/${skillPath}`;
+}
+
+/**
+ * Fetch security audit results for skills via the per-skill audit endpoint.
  * Returns null on any error or timeout — never blocks installation.
- *
- * `skillFiles` mirrors the map sent by install telemetry
- * ({ skillName: repoRelativePath }), so the server derives the same
- * skill_id for audit as for download counting.
  */
 export async function fetchAuditData(
   source: string,
@@ -135,28 +172,42 @@ export async function fetchAuditData(
 ): Promise<AuditResponse | null> {
   if (skillSlugs.length === 0) return null;
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
   try {
-    const params = new URLSearchParams({
-      source,
-      source_type: sourceType,
-      skills: skillSlugs.join(','),
+    const results: AuditResponse = {};
+    const promises = skillSlugs.map(async (skillName) => {
+      const skillId = buildSkillId(sourceType, source, skillName, skillFiles);
+      if (!skillId) return;
+
+      try {
+        const response = await fetch(
+          `${AUDIT_BASE}/${skillId.split('/').map(encodeURIComponent).join('/')}/audit`,
+          { signal: controller.signal }
+        );
+        if (response.ok) {
+          const data = (await response.json()) as Record<string, unknown>;
+          if (!data.error) {
+            results[skillName] = {
+              risk_level: (data.risk_level as SkillAuditResult['risk_level']) ?? 'unknown',
+              risk_score: (data.risk_score as number) ?? null,
+              risk_signals: (data.risk_signals as SecuritySignal[]) ?? [],
+              audited_at: (data.audited_at as string) ?? null,
+            };
+          }
+        }
+      } catch {
+        // Individual skill fetch failed — skip
+      }
     });
-    if (skillFiles && Object.keys(skillFiles).length > 0) {
-      params.set('skill_files', JSON.stringify(skillFiles));
-    }
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
-
-    const response = await fetch(`${AUDIT_URL}?${params.toString()}`, {
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
-
-    if (!response.ok) return null;
-    return (await response.json()) as AuditResponse;
+    await Promise.all(promises);
+    return Object.keys(results).length > 0 ? results : null;
   } catch {
     return null;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 

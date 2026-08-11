@@ -7,30 +7,33 @@ describe('fetchAuditData', () => {
     vi.unstubAllGlobals();
   });
 
-  it('sends source, source_type and skills params and parses response', async () => {
+  it('calls per-skill audit endpoint for each skill', async () => {
     const payload = {
+      risk_level: 'low',
+      risk_score: 10,
+      risk_signals: [],
+      audited_at: null,
+    };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => payload }));
+
+    const result = await fetchAuditData('vercel-labs/agent-skills', ['deploy-to-vercel'], 'github');
+
+    expect(result).toEqual({
       'deploy-to-vercel': {
         risk_level: 'low',
         risk_score: 10,
         risk_signals: [],
         audited_at: null,
       },
-    };
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => payload }));
-
-    const result = await fetchAuditData('vercel-labs/agent-skills', ['deploy-to-vercel'], 'github');
-
-    expect(result).toEqual(payload);
+    });
 
     const [url] = vi.mocked(fetch).mock.calls[0] as [string];
-    const parsed = new URL(url);
-    expect(parsed.pathname).toBe('/api/v1/skills/audit');
-    expect(parsed.searchParams.get('source')).toBe('vercel-labs/agent-skills');
-    expect(parsed.searchParams.get('source_type')).toBe('github');
-    expect(parsed.searchParams.get('skills')).toBe('deploy-to-vercel');
+    expect(url).toContain('/api/v1/skills/');
+    expect(url).toContain('/audit');
+    expect(url).toContain('deploy-to-vercel');
   });
 
-  it('sends skill_files param when provided', async () => {
+  it('derives skill_id from skill_files when provided', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }));
 
     await fetchAuditData('a/b', ['deploy-to-vercel'], 'github', {
@@ -38,11 +41,7 @@ describe('fetchAuditData', () => {
     });
 
     const [url] = vi.mocked(fetch).mock.calls[0] as [string];
-    const parsed = new URL(url);
-    const skillFiles = JSON.parse(parsed.searchParams.get('skill_files')!);
-    expect(skillFiles).toEqual({
-      'deploy-to-vercel': 'skills/deploy-to-vercel/SKILL.md',
-    });
+    expect(url).toContain('/api/v1/skills/github/a/b/skills/deploy-to-vercel/audit');
   });
 
   it('returns null when response is not ok', async () => {
