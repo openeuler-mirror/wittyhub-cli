@@ -101,32 +101,49 @@ export function setVersion(version: string): void {
 
 // ─── Security audit data ───
 
-export interface PartnerAudit {
-  risk: 'safe' | 'low' | 'medium' | 'high' | 'critical' | 'unknown';
-  alerts?: number;
-  score?: number;
-  analyzedAt: string;
+export interface SecuritySignal {
+  id: string;
+  name: string;
+  description?: string;
+  severity: string;
 }
 
-export type SkillAuditData = Record<string, PartnerAudit>;
-export type AuditResponse = Record<string, SkillAuditData>;
+export interface SkillAuditResult {
+  risk_level: 'safe' | 'low' | 'medium' | 'high' | 'critical' | 'unknown';
+  risk_score: number | null;
+  risk_signals: SecuritySignal[];
+  audited_at: string | null;
+}
+
+/** Batch audit response, keyed by the requested skill name. */
+export type AuditResponse = Record<string, SkillAuditResult>;
 
 /**
- * Fetch security audit results for skills from the audit API.
+ * Fetch security audit results for skills from the batch audit API.
  * Returns null on any error or timeout — never blocks installation.
+ *
+ * `skillFiles` mirrors the map sent by install telemetry
+ * ({ skillName: repoRelativePath }), so the server derives the same
+ * skill_id for audit as for download counting.
  */
 export async function fetchAuditData(
   source: string,
   skillSlugs: string[],
-  timeoutMs = 3000
+  sourceType = 'github',
+  skillFiles?: Record<string, string>,
+  timeoutMs = 15000
 ): Promise<AuditResponse | null> {
   if (skillSlugs.length === 0) return null;
 
   try {
     const params = new URLSearchParams({
       source,
+      source_type: sourceType,
       skills: skillSlugs.join(','),
     });
+    if (skillFiles && Object.keys(skillFiles).length > 0) {
+      params.set('skill_files', JSON.stringify(skillFiles));
+    }
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
