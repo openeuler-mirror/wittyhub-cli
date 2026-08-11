@@ -67,13 +67,16 @@ describe('getHighRiskSkills', () => {
     { slug: 'skill-c', displayName: 'Skill C' },
   ];
 
-  it('returns names of high/critical risk skills', () => {
+  it('returns names with actual risk levels for high/critical skills', () => {
     const audit = {
       'skill-a': { risk_level: 'high', risk_score: 80, risk_signals: [], audited_at: null },
       'skill-b': { risk_level: 'low', risk_score: 10, risk_signals: [], audited_at: null },
       'skill-c': { risk_level: 'critical', risk_score: 95, risk_signals: [], audited_at: null },
     } as never;
-    expect(getHighRiskSkills(audit, skills)).toEqual(['Skill A', 'Skill C']);
+    expect(getHighRiskSkills(audit, skills)).toEqual([
+      { name: 'Skill A', riskLevel: 'high' },
+      { name: 'Skill C', riskLevel: 'critical' },
+    ]);
   });
 
   it('ignores skills without audit data', () => {

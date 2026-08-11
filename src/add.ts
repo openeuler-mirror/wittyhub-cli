@@ -157,20 +157,28 @@ function buildSecurityLines(
 }
 
 /**
- * Names of the selected skills flagged as high/critical risk.
+ * Skills flagged as high/critical risk, with their actual risk level.
  * Used to gate the install confirmation on risky skills.
  */
+export interface HighRiskSkill {
+  name: string;
+  riskLevel: 'high' | 'critical';
+}
+
 export function getHighRiskSkills(
   auditData: AuditResponse | null,
   skills: Array<{ slug: string; displayName: string }>
-): string[] {
+): HighRiskSkill[] {
   if (!auditData) return [];
   return skills
     .filter((s) => {
       const data = auditData[s.slug];
       return data && (data.risk_level === 'high' || data.risk_level === 'critical');
     })
-    .map((s) => s.displayName);
+    .map((s) => ({
+      name: s.displayName,
+      riskLevel: auditData[s.slug]!.risk_level as 'high' | 'critical',
+    }));
 }
 
 /**
@@ -1754,17 +1762,18 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
     // Gate install on the security audit: risky skills require explicit consent.
     const highRiskSkills = getHighRiskSkills(auditData, auditSkills);
     if (highRiskSkills.length > 0) {
-      p.log.warn(
-        `${pc.red(pc.bold('⚠ 高风险警告：'))} ${highRiskSkills.join(
-          ', '
-        )} 经安全审计标记为 high/critical 风险，请谨慎安装。`
-      );
+      const list = highRiskSkills
+        .map((s) => `${s.name} 经安全审计标记为 ${s.riskLevel} 风险`)
+        .join('，');
+      p.log.warn(`${pc.red(pc.bold('⚠ 高风险警告：'))} ${list}，请谨慎安装。`);
     }
 
     if (!options.yes) {
       const message =
         highRiskSkills.length > 0
-          ? `检测到以下技能存在安全风险：${highRiskSkills.join(', ')}。仍要继续安装？`
+          ? `检测到以下技能存在安全风险：${highRiskSkills
+              .map((s) => `${s.name} (${s.riskLevel})`)
+              .join(', ')}。仍要继续安装？`
           : 'Proceed with installation?';
       const confirmed = await p.confirm({
         message,
