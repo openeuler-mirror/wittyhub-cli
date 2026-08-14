@@ -139,24 +139,27 @@ function buildSkillId(
   if (!['github', 'gitcode', 'gitlab', 'gitee'].includes(sourceType)) return null;
   if (!ownerRepo) return null;
 
+  // Slugify owner/repo to match Python extract_owner_repo (slugify_identifier)
+  const slugifiedOwnerRepo = ownerRepo.split('/').map(slugifyTelemetryValue).join('/');
+
   if (skillFiles) {
     const relativePath = skillFiles[skillName];
     if (relativePath) {
       const normalizedPath = relativePath.trim().replace(/\\/g, '/').replace(/\/+$/, '');
       if (normalizedPath === 'SKILL.md') {
-        const skillPath = ownerRepo.split('/').pop()!;
-        return `${sourceType}/${ownerRepo}/${skillPath}`;
+        const skillPath = slugifiedOwnerRepo.split('/').pop()!;
+        return `${sourceType}/${slugifiedOwnerRepo}/${skillPath}`;
       }
       if (normalizedPath.endsWith('/SKILL.md')) {
         const skillPath = normalizedPath.slice(0, -'/SKILL.md'.length);
-        return `${sourceType}/${ownerRepo}/${skillPath}`;
+        return `${sourceType}/${slugifiedOwnerRepo}/${skillPath}`;
       }
     }
   }
 
   const skillPath = slugifyTelemetryValue(skillName);
   if (!skillPath) return null;
-  return `${sourceType}/${ownerRepo}/${skillPath}`;
+  return `${sourceType}/${slugifiedOwnerRepo}/${skillPath}`;
 }
 
 /**
