@@ -4,8 +4,8 @@
   "description": "The open agent skills ecosystem",
   "type": "module",
   "bin": {
-    "wittyhub": "./bin/cli.mjs",
-    "add-skill": "./bin/cli.mjs"
+    "wittyhub": "bin/cli.mjs",
+    "add-skill": "bin/cli.mjs"
   },
   "files": [
     "dist",
