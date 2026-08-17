@@ -4,6 +4,7 @@ import { sanitizeMetadata } from './sanitize.ts';
 import { track } from './telemetry.ts';
 import { isRepoPrivate } from './source-parser.ts';
 import { isRunningInAgent } from './detect-agent.ts';
+import { loadCliConfig } from './config.ts';
 
 const RESET = '\x1b[0m';
 const BOLD = '\x1b[1m';
@@ -12,9 +13,18 @@ const TEXT = '\x1b[38;5;145m';
 const CYAN = '\x1b[36m';
 const MAGENTA = '\x1b[35m';
 const YELLOW = '\x1b[33m';
+const RED = '\x1b[31m';
+const GREEN = '\x1b[32m';
 
-// API endpoint for skills search
-const SEARCH_API_BASE = process.env.SKILLS_API_URL || 'https://skills.sh';
+// 后端技能搜索接口，可通过 cli.yaml 的 search_url 或 SKILLS_API_URL 覆盖
+const DEFAULT_SEARCH_URL = 'http://localhost:8080/api/v1/index/search';
+const cliSearchConfig = loadCliConfig();
+const SEARCH_URL =
+  typeof cliSearchConfig.search_url === 'string' && cliSearchConfig.search_url.trim()
+    ? cliSearchConfig.search_url.trim()
+    : process.env.SKILLS_API_URL
+      ? `${process.env.SKILLS_API_URL.replace(/\/$/, '')}/api/v1/index/search`
+      : DEFAULT_SEARCH_URL;
 
 function formatInstalls(count: number): string {
   if (!count || count <= 0) return '';
@@ -23,11 +33,41 @@ function formatInstalls(count: number): string {
   return `${count} install${count === 1 ? '' : 's'}`;
 }
 
+/** 根据 risk_score 返回带颜色的风险等级标签，未知时返回空串 */
+function formatRiskLevel(riskScore: number | undefined): string {
+  if (riskScore === undefined || riskScore === null) return '';
+  if (riskScore <= 20) return `${GREEN}safe${RESET}`;
+  if (riskScore <= 50) return `${GREEN}low${RESET}`;
+  if (riskScore <= 80) return `${YELLOW}medium${RESET}`;
+  return `${RED}high${RESET}`;
+}
+
+// 在文本中高亮匹配的搜索词（不区分大小写，支持多词）
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function highlightMatches(text: string, query: string): string {
+  if (!text || !query) return text;
+  const terms = query.trim().split(/\s+/).filter(Boolean).map(escapeRegExp);
+  if (terms.length === 0) return text;
+  // 使用品红色，与风险等级的颜色（绿/黄/红）区分开
+  return text.replace(new RegExp(`(${terms.join('|')})`, 'gi'), `${MAGENTA}$1${RESET}`);
+}
+
 export interface SearchSkill {
   name: string;
   slug: string;
   source: string;
   installs: number;
+  description?: string;
+  riskScore?: number;
+  sourceUrl?: string;
+}
+
+export interface SearchResult {
+  skills: SearchSkill[];
+  error?: string;
 }
 
 export interface FindOptions {
@@ -55,7 +95,7 @@ export function parseFindOptions(args: string[]): ParseFindOptionsResult {
     if (arg === '--owner') {
       const value = args[i + 1];
       if (!value || value.startsWith('-')) {
-        errors.push('--owner requires a GitHub owner');
+        errors.push('--owner requires an owner');
         continue;
       }
       ownerValue = value;
@@ -63,7 +103,7 @@ export function parseFindOptions(args: string[]): ParseFindOptionsResult {
     } else if (arg.startsWith('--owner=')) {
       ownerValue = arg.slice('--owner='.length);
       if (!ownerValue) {
-        errors.push('--owner requires a GitHub owner');
+        errors.push('--owner requires an owner');
         continue;
       }
     } else {
@@ -73,7 +113,7 @@ export function parseFindOptions(args: string[]): ParseFindOptionsResult {
 
     const owner = ownerValue.trim().toLowerCase();
     if (!GITHUB_OWNER_PATTERN.test(owner)) {
-      errors.push('--owner must be a valid GitHub owner');
+      errors.push('--owner must be a valid owner');
       continue;
     }
     options.owner = owner;
@@ -82,36 +122,68 @@ export function parseFindOptions(args: string[]): ParseFindOptionsResult {
   return { query: queryParts.join(' '), options, errors };
 }
 
-// Search via API
-export async function searchSkillsAPI(query: string, owner?: string): Promise<SearchSkill[]> {
+// 通过后端搜索接口查询技能
+export async function searchSkillsAPI(query: string, owner?: string): Promise<SearchResult> {
+  const params = new URLSearchParams({ q: query, limit: '10', mode: 'text' });
+  const url = `${SEARCH_URL}?${params.toString()}`;
+
+  let res: Response;
   try {
-    const params = new URLSearchParams({ q: query, limit: '10' });
-    if (owner) params.set('owner', owner);
-    const url = `${SEARCH_API_BASE}/api/search?${params.toString()}`;
-    const res = await fetch(url);
-
-    if (!res.ok) return [];
-
-    const data = (await res.json()) as {
-      skills: Array<{
-        id: string;
-        name: string;
-        installs: number;
-        source: string;
-      }>;
-    };
-
-    return data.skills
-      .map((skill) => ({
-        name: sanitizeMetadata(skill.name),
-        slug: sanitizeMetadata(skill.id),
-        source: sanitizeMetadata(skill.source || ''),
-        installs: skill.installs,
-      }))
-      .sort((a, b) => (b.installs || 0) - (a.installs || 0));
+    res = await fetch(url);
   } catch {
-    return [];
+    return { skills: [], error: `无法连接搜索服务: ${SEARCH_URL}` };
   }
+
+  if (!res.ok) {
+    return { skills: [], error: `搜索服务返回 HTTP ${res.status}` };
+  }
+
+  let data: {
+    results?: Array<{
+      skill_id: string;
+      name: string;
+      description: string | null;
+      source: string;
+      source_url: string;
+      download_count: number;
+      risk_score: number | null;
+    }>;
+    total?: number;
+  };
+  try {
+    data = (await res.json()) as typeof data;
+  } catch {
+    return { skills: [], error: '搜索服务响应格式无效' };
+  }
+
+  let skills = (data.results ?? []).map((skill) => ({
+    name: sanitizeMetadata(skill.name),
+    slug: sanitizeMetadata(skill.skill_id),
+    source: sanitizeMetadata(skill.source || ''),
+    installs: skill.download_count || 0,
+    description: skill.description ? sanitizeMetadata(skill.description) : undefined,
+    riskScore: skill.risk_score ?? undefined,
+    sourceUrl: skill.source_url ? sanitizeMetadata(skill.source_url) : undefined,
+  }));
+
+  // 后端接口不支持 owner 过滤，这里在客户端按 source_url 中的 owner 过滤
+  if (owner) {
+    const ownerLower = owner.toLowerCase();
+    skills = skills.filter((skill) => {
+      if (skill.sourceUrl) {
+        try {
+          const u = new URL(skill.sourceUrl);
+          const urlOwner = u.pathname.split('/').filter(Boolean)[0];
+          if (urlOwner?.toLowerCase() === ownerLower) return true;
+        } catch {
+          // fall through to slug match
+        }
+      }
+      return skill.slug.toLowerCase().includes(`/${ownerLower}/`);
+    });
+  }
+
+  return { skills: skills.sort((a, b) => (b.installs || 0) - (a.installs || 0)) };
 }
 
 // ANSI escape codes for terminal control
@@ -127,6 +199,7 @@ async function runSearchPrompt(initialQuery = '', owner?: string): Promise<Searc
   let selectedIndex = 0;
   let query = initialQuery;
   let loading = false;
+  let searchError: string | null = null;
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
   let lastRenderedLines = 0;
 
@@ -165,6 +238,8 @@ async function runSearchPrompt(initialQuery = '', owner?: string): Promise<Searc
       lines.push(`${DIM}Start typing to search (min 2 chars)${RESET}`);
     } else if (results.length === 0 && loading) {
       lines.push(`${DIM}Searching...${RESET}`);
+    } else if (results.length === 0 && searchError) {
+      lines.push(`${RED}${searchError}${RESET}`);
     } else if (results.length === 0) {
       lines.push(`${DIM}No skills found${RESET}`);
     } else {
@@ -175,13 +250,23 @@ async function runSearchPrompt(initialQuery = '', owner?: string): Promise<Searc
         const skill = visible[i]!;
         const isSelected = i === selectedIndex;
         const arrow = isSelected ? `${BOLD}>${RESET}` : ' ';
-        const name = isSelected ? `${BOLD}${skill.name}${RESET}` : `${TEXT}${skill.name}${RESET}`;
+        const hlName = highlightMatches(skill.name, query);
+        const name = isSelected ? `${BOLD}${hlName}${RESET}` : `${TEXT}${hlName}${RESET}`;
         const source = skill.source ? ` ${DIM}${skill.source}${RESET}` : '';
         const installs = formatInstalls(skill.installs);
         const installsBadge = installs ? ` ${CYAN}${installs}${RESET}` : '';
+        const risk = formatRiskLevel(skill.riskScore);
+        const riskBadge = risk ? ` ${risk}` : '';
         const loadingIndicator = loading && i === 0 ? ` ${DIM}...${RESET}` : '';
 
-        lines.push(`  ${arrow} ${name}${source}${installsBadge}${loadingIndicator}`);
+        lines.push(`  ${arrow} ${name}${source}${installsBadge}${riskBadge}${loadingIndicator}`);
+        if (skill.description) {
+          const descPlain =
+            skill.description.length > 80
+              ? `${skill.description.slice(0, 77)}...`
+              : skill.description;
+          lines.push(`    ${DIM}${highlightMatches(descPlain, query)}${RESET}`);
+        }
       }
     }
 
@@ -208,6 +293,7 @@ async function runSearchPrompt(initialQuery = '', owner?: string): Promise<Searc
 
     if (!q || q.length < 2) {
       results = [];
+      searchError = null;
       selectedIndex = 0;
       render();
       return;
@@ -223,10 +309,13 @@ async function runSearchPrompt(initialQuery = '', owner?: string): Promise<Searc
 
     debounceTimer = setTimeout(async () => {
       try {
-        results = await searchSkillsAPI(q, owner);
+        const result = await searchSkillsAPI(q, owner);
+        results = result.skills;
+        searchError = result.error ?? null;
         selectedIndex = 0;
       } catch {
         results = [];
+        searchError = null;
       } finally {
         loading = false;
         debounceTimer = null;
@@ -308,10 +397,31 @@ function getOwnerRepoFromString(pkg: string): { owner: string; repo: string } | 
   // Handle owner/repo or owner/repo@skill
   const atIndex = pkg.lastIndexOf('@');
   const repoPath = atIndex > 0 ? pkg.slice(0, atIndex) : pkg;
-  const match = repoPath.match(/^([^/]+)\/([^/]+)$/);
-  if (match) {
-    return { owner: match[1]!, repo: match[2]! };
+
+  // URL format: https://github.com/owner/repo or https://github.com/owner/repo.git
+  const urlMatch = repoPath.match(/^https?:\/\/[^/]+\/([^/]+)\/([^/]+?)(?:\.git)?\/?$/);
+  if (urlMatch) {
+    return { owner: urlMatch[1]!, repo: urlMatch[2]! };
   }
+
+  // Blob URL format: https://host/owner/repo/blob/<ref>/<path>/SKILL.md
+  const blobMatch = repoPath.match(/^https?:\/\/[^/]+\/([^/]+)\/([^/]+?)\/blob\//);
+  if (blobMatch) {
+    return { owner: blobMatch[1]!, repo: blobMatch[2]! };
+  }
+
+  // owner/repo shorthand
+  const shorthandMatch = repoPath.match(/^([^/]+)\/([^/]+)$/);
+  if (shorthandMatch) {
+    return { owner: shorthandMatch[1]!, repo: shorthandMatch[2]! };
+  }
+
+  // slug format: platform/owner/repo/...
+  const slugMatch = repoPath.match(/^[^/]+\/([^/]+)\/([^/]+)/);
+  if (slugMatch) {
+    return { owner: slugMatch[1]!, repo: slugMatch[2]! };
+  }
+
   return null;
 }
 
@@ -338,7 +448,7 @@ ${DIM}  2) npx wittyhub add <owner/repo@skill>${RESET}`;
 
   // Non-interactive mode: just print results and exit
   if (query) {
-    const results = await searchSkillsAPI(query, owner);
+    const { skills: results, error: searchError } = await searchSkillsAPI(query, owner);
 
     // Track telemetry for non-interactive search
     track({
@@ -347,22 +457,40 @@ ${DIM}  2) npx wittyhub add <owner/repo@skill>${RESET}`;
       resultCount: String(results.length),
     });
 
+    if (searchError) {
+      console.error(`${RED}${searchError}${RESET}`);
+      return;
+    }
+
     if (results.length === 0) {
       const ownerSuffix = owner ? ` from owner "${owner}"` : '';
       console.log(`${DIM}No skills found for "${query}"${ownerSuffix}${RESET}`);
       return;
     }
 
-    console.log(`${DIM}Install with${RESET} npx wittyhub add <owner/repo@skill>`);
+    console.log(`${DIM}Install with${RESET} npx wittyhub add <repo-url> --skill <skill>`);
     console.log();
 
     for (const skill of results.slice(0, 6)) {
-      const pkg = skill.source || skill.slug;
+      const raw = skill.sourceUrl || skill.source || skill.slug;
+      const hlName = highlightMatches(skill.name, query);
+      const installTarget = skill.sourceUrl
+        ? `${skill.sourceUrl} --skill ${hlName}`
+        : `${raw}@${hlName}`;
       const installs = formatInstalls(skill.installs);
+      const risk = formatRiskLevel(skill.riskScore);
+      const riskBadge = risk ? ` ${risk}` : '';
       console.log(
-        `${TEXT}${pkg}@${skill.name}${RESET}${installs ? ` ${CYAN}${installs}${RESET}` : ''}`
+        `${TEXT}${installTarget}${RESET}${installs ? ` ${CYAN}${installs}${RESET}` : ''}${riskBadge}`
       );
-      console.log(`${DIM}└ https://skills.sh/${skill.slug}${RESET}`);
+      if (skill.description) {
+        const descPlain =
+          skill.description.length > 100
+            ? `${skill.description.slice(0, 97)}...`
+            : skill.description;
+        console.log(`${DIM}  ${highlightMatches(descPlain, query)}${RESET}`);
+      }
+      console.log(`${DIM}└ ${skill.sourceUrl || `https://skills.sh/${skill.slug}`}${RESET}`);
       console.log();
     }
     return;
@@ -392,8 +520,8 @@ ${DIM}  2) npx wittyhub add <owner/repo@skill>${RESET}`;
     return;
   }
 
-  // Use source (owner/repo) and skill name for installation
-  const pkg = selected.source || selected.slug;
+  // Use sourceUrl (repo URL) and skill name for installation
+  const pkg = selected.sourceUrl || selected.source || selected.slug;
   const skillName = selected.name;
 
   console.log();

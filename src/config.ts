@@ -8,6 +8,7 @@ const CLI_CONFIG_PATH = join(homedir(), '.config', 'wittyhub', 'cli.yaml');
 export interface CliConfig {
   telemetry_url?: string;
   audit_url?: string;
+  search_url?: string;
 }
 
 export function loadCliConfig(): CliConfig {
