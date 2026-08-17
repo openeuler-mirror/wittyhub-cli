@@ -1,7 +1,7 @@
 import { loadCliConfig } from './config.ts';
 
 const DEFAULT_TELEMETRY_URL = 'http://localhost:8080/api/v1/skills/telemetry';
-const DEFAULT_AUDIT_URL = 'http://localhost:8080/api/v1/skills/audit';
+const DEFAULT_AUDIT_URL = 'http://localhost:8080/api/v1/skills/{skill_id}/audit';
 
 const cliConfig = loadCliConfig();
 const TELEMETRY_URL =
@@ -101,45 +101,116 @@ export function setVersion(version: string): void {
 
 // ─── Security audit data ───
 
-export interface PartnerAudit {
-  risk: 'safe' | 'low' | 'medium' | 'high' | 'critical' | 'unknown';
-  alerts?: number;
-  score?: number;
-  analyzedAt: string;
+export interface SecuritySignal {
+  id: string;
+  name: string;
+  description?: string;
+  severity: string;
 }
 
-export type SkillAuditData = Record<string, PartnerAudit>;
-export type AuditResponse = Record<string, SkillAuditData>;
+export interface SkillAuditResult {
+  risk_level: 'safe' | 'low' | 'medium' | 'high' | 'critical' | 'unknown';
+  risk_score: number | null;
+  risk_signals: SecuritySignal[];
+  audited_at: string | null;
+}
+
+/** Batch audit response, keyed by the requested skill name. */
+export type AuditResponse = Record<string, SkillAuditResult>;
 
 /**
- * Fetch security audit results for skills from the audit API.
+ * Derive the same skill_id that the server uses for telemetry/audit lookups,
+ * matching the Python ``build_skill_id_from_telemetry`` logic.
+ */
+function slugifyTelemetryValue(value: string): string {
+  const lowered = value.trim().toLowerCase();
+  if (!lowered) return '';
+  let normalized = lowered.replace(/[^a-z0-9._-]+/g, '-');
+  normalized = normalized.replace(/-{2,}/g, '-');
+  return normalized.replace(/^-|-$/g, '');
+}
+
+function buildSkillId(
+  sourceType: string,
+  ownerRepo: string,
+  skillName: string,
+  skillFiles?: Record<string, string>
+): string | null {
+  if (!['github', 'gitcode', 'gitlab', 'gitee'].includes(sourceType)) return null;
+  if (!ownerRepo) return null;
+
+  // Slugify owner/repo to match Python extract_owner_repo (slugify_identifier)
+  const slugifiedOwnerRepo = ownerRepo.split('/').map(slugifyTelemetryValue).join('/');
+
+  if (skillFiles) {
+    const relativePath = skillFiles[skillName];
+    if (relativePath) {
+      const normalizedPath = relativePath.trim().replace(/\\/g, '/').replace(/\/+$/, '');
+      if (normalizedPath === 'SKILL.md') {
+        const skillPath = slugifiedOwnerRepo.split('/').pop()!;
+        return `${sourceType}/${slugifiedOwnerRepo}/${skillPath}`;
+      }
+      if (normalizedPath.endsWith('/SKILL.md')) {
+        const skillPath = normalizedPath.slice(0, -'/SKILL.md'.length);
+        return `${sourceType}/${slugifiedOwnerRepo}/${skillPath}`;
+      }
+    }
+  }
+
+  const skillPath = slugifyTelemetryValue(skillName);
+  if (!skillPath) return null;
+  return `${sourceType}/${slugifiedOwnerRepo}/${skillPath}`;
+}
+
+/**
+ * Fetch security audit results for skills via the per-skill audit endpoint.
  * Returns null on any error or timeout — never blocks installation.
  */
 export async function fetchAuditData(
   source: string,
   skillSlugs: string[],
-  timeoutMs = 3000
+  sourceType = 'github',
+  skillFiles?: Record<string, string>,
+  timeoutMs = 15000
 ): Promise<AuditResponse | null> {
   if (skillSlugs.length === 0) return null;
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
   try {
-    const params = new URLSearchParams({
-      source,
-      skills: skillSlugs.join(','),
+    const results: AuditResponse = {};
+    const promises = skillSlugs.map(async (skillName) => {
+      const skillId = buildSkillId(sourceType, source, skillName, skillFiles);
+      if (!skillId) return;
+
+      try {
+        const response = await fetch(
+          AUDIT_URL.replace('{skill_id}', skillId.split('/').map(encodeURIComponent).join('/')),
+          { signal: controller.signal }
+        );
+        if (response.ok) {
+          const data = (await response.json()) as Record<string, unknown>;
+          if (!data.error) {
+            results[skillName] = {
+              risk_level: (data.risk_level as SkillAuditResult['risk_level']) ?? 'unknown',
+              risk_score: (data.risk_score as number) ?? null,
+              risk_signals: (data.risk_signals as SecuritySignal[]) ?? [],
+              audited_at: (data.audited_at as string) ?? null,
+            };
+          }
+        }
+      } catch {
+        // Individual skill fetch failed — skip
+      }
     });
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
-
-    const response = await fetch(`${AUDIT_URL}?${params.toString()}`, {
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
-
-    if (!response.ok) return null;
-    return (await response.json()) as AuditResponse;
+    await Promise.all(promises);
+    return Object.keys(results).length > 0 ? results : null;
   } catch {
     return null;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 

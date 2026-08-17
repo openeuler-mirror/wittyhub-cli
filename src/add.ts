@@ -55,7 +55,7 @@ import {
   setVersion,
   fetchAuditData,
   type AuditResponse,
-  type PartnerAudit,
+  type SkillAuditResult,
 } from './telemetry.ts';
 import { detectAgent, getAgentType } from './detect-agent.ts';
 import { wellKnownProvider, type WellKnownSkill } from './providers/index.ts';
@@ -88,24 +88,18 @@ export function initTelemetry(version: string): void {
 function riskLabel(risk: string): string {
   switch (risk) {
     case 'critical':
-      return pc.red(pc.bold('Critical Risk'));
+      return pc.red(pc.bold('Critical'));
     case 'high':
-      return pc.red('High Risk');
+      return pc.red('High');
     case 'medium':
-      return pc.yellow('Med Risk');
+      return pc.yellow('Med');
     case 'low':
-      return pc.green('Low Risk');
+      return pc.green('Low');
     case 'safe':
       return pc.green('Safe');
     default:
-      return pc.dim('--');
+      return pc.dim('Unknown');
   }
-}
-
-function socketLabel(audit: PartnerAudit | undefined): string {
-  if (!audit) return pc.dim('--');
-  const count = audit.alerts ?? 0;
-  return count > 0 ? pc.red(`${count} alert${count !== 1 ? 's' : ''}`) : pc.green('0 alerts');
 }
 
 /** Pad a string to a given visible width (ignoring ANSI escape codes). */
@@ -117,55 +111,74 @@ function padEnd(str: string, width: number): string {
 }
 
 /**
- * Render a compact security table showing partner audit results.
+ * Render a compact security table of wittyhub audit results.
  * Returns the lines to display, or empty array if no data.
  */
 function buildSecurityLines(
   auditData: AuditResponse | null,
-  skills: Array<{ slug: string; displayName: string }>,
-  source: string
+  skills: Array<{ slug: string; displayName: string }>
 ): string[] {
   if (!auditData) return [];
 
-  // Check if we have any audit data at all
-  const hasAny = skills.some((s) => {
-    const data = auditData[s.slug];
-    return data && Object.keys(data).length > 0;
-  });
-  if (!hasAny) return [];
+  const rows = skills.filter((s) => auditData[s.slug]);
+  if (rows.length === 0) return [];
 
   // Compute column width for skill names
-  const nameWidth = Math.min(Math.max(...skills.map((s) => s.displayName.length)), 36);
+  const nameWidth = Math.min(Math.max(...rows.map((s) => s.displayName.length)), 36);
 
   // Header
   const lines: string[] = [];
   const header =
     padEnd('', nameWidth + 2) +
-    padEnd(pc.dim('Gen'), 18) +
-    padEnd(pc.dim('Socket'), 18) +
-    pc.dim('Snyk');
+    padEnd(pc.dim('Risk'), 18) +
+    padEnd(pc.dim('Score'), 8) +
+    pc.dim('Signals');
   lines.push(header);
 
   // Rows
-  for (const skill of skills) {
-    const data = auditData[skill.slug];
+  for (const skill of rows) {
+    const data = auditData[skill.slug]!;
     const name =
       skill.displayName.length > nameWidth
         ? skill.displayName.slice(0, nameWidth - 1) + '\u2026'
         : skill.displayName;
 
-    const ath = data?.ath ? riskLabel(data.ath.risk) : pc.dim('--');
-    const socket = data?.socket ? socketLabel(data.socket) : pc.dim('--');
-    const snyk = data?.snyk ? riskLabel(data.snyk.risk) : pc.dim('--');
+    const risk = riskLabel(data.risk_level);
+    const score = data.risk_score != null ? pc.dim(String(data.risk_score)) : pc.dim('--');
+    const signals =
+      data.risk_signals.length > 0 ? pc.yellow(String(data.risk_signals.length)) : pc.dim('0');
 
-    lines.push(padEnd(pc.cyan(name), nameWidth + 2) + padEnd(ath, 18) + padEnd(socket, 18) + snyk);
+    lines.push(
+      padEnd(pc.cyan(name), nameWidth + 2) + padEnd(risk, 18) + padEnd(score, 8) + signals
+    );
   }
 
-  // Footer link
-  lines.push('');
-  lines.push(`${pc.dim('Details:')} ${pc.dim(`https://skills.sh/${source}`)}`);
-
   return lines;
+}
+
+/**
+ * Skills flagged as high/critical risk, with their actual risk level.
+ * Used to gate the install confirmation on risky skills.
+ */
+export interface HighRiskSkill {
+  name: string;
+  riskLevel: 'high' | 'critical';
+}
+
+export function getHighRiskSkills(
+  auditData: AuditResponse | null,
+  skills: Array<{ slug: string; displayName: string }>
+): HighRiskSkill[] {
+  if (!auditData) return [];
+  return skills
+    .filter((s) => {
+      const data = auditData[s.slug];
+      return data && (data.risk_level === 'high' || data.risk_level === 'critical');
+    })
+    .map((s) => ({
+      name: s.displayName,
+      riskLevel: auditData[s.slug]!.risk_level as 'high' | 'critical',
+    }));
 }
 
 /**
@@ -203,8 +216,40 @@ function formatList(items: string[], maxShow: number = 5): string {
   return `${shown.join(', ')} +${remaining} more`;
 }
 
-// 临时关闭审计请求。等 fetchAuditData 及其后端审计能力完善后，再改回 true。
-const ENABLE_AUDIT_FETCH = false;
+// 安装时请求并展示安全审计结果，并按风险引导用户确认是否安装。
+const ENABLE_AUDIT_FETCH = true;
+
+/**
+ * Build the { skillName: repoRelativePath } map sent to both telemetry and
+ * the batch audit endpoint, so both derive the same skill_id server-side.
+ * Local-path skills (no repo temp dir) are skipped.
+ */
+function buildSkillFiles(
+  selectedSkills: Skill[],
+  tempDir: string | null,
+  blobResult: BlobInstallResult | null
+): Record<string, string> {
+  const skillFiles: Record<string, string> = {};
+  for (const skill of selectedSkills) {
+    if (blobResult && 'repoPath' in skill) {
+      // Blob-based: repoPath is already the repo-relative path (e.g., "skills/react/SKILL.md")
+      skillFiles[skill.name] = (skill as BlobSkill).repoPath;
+    } else if (tempDir && skill.path === tempDir) {
+      // Skill is at root level of repo
+      skillFiles[skill.name] = 'SKILL.md';
+    } else if (tempDir && skill.path.startsWith(tempDir + sep)) {
+      // Compute path relative to repo root (tempDir), not search path.
+      // Use forward slashes for telemetry (URL-style paths)
+      skillFiles[skill.name] =
+        skill.path
+          .slice(tempDir.length + 1)
+          .split(sep)
+          .join('/') + '/SKILL.md';
+    }
+    // Local path — no tempDir match, skip (same as telemetry)
+  }
+  return skillFiles;
+}
 
 /**
  * Splits agents into universal and non-universal (symlinked) groups.
@@ -1367,14 +1412,17 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
       selectedSkills = selected as Skill[];
     }
 
-    // 这里先保留原来的审计调用逻辑，但通过开关临时关闭。
-    // 等审计能力完善后，只需要修改 ENABLE_AUDIT_FETCH 即可恢复。
+    // Request security audits for the selected skills. skillFiles is sent so
+    // the server derives the same skill_id as the install telemetry does.
     const ownerRepoForAudit = getOwnerRepo(parsed);
+    const auditSkillFiles = buildSkillFiles(selectedSkills, tempDir, blobResult);
     const auditPromise =
       ENABLE_AUDIT_FETCH && ownerRepoForAudit
         ? fetchAuditData(
             ownerRepoForAudit,
-            selectedSkills.map((s) => getSkillDisplayName(s))
+            selectedSkills.map((s) => s.name),
+            parsed.type,
+            auditSkillFiles
           )
         : Promise.resolve(null);
 
@@ -1694,17 +1742,15 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
 
     // Await and display security audit results (started earlier in parallel)
     // Wrapped in try/catch so a failed audit fetch never blocks installation.
+    const auditSkills = selectedSkills.map((s) => ({
+      slug: getSkillDisplayName(s),
+      displayName: getSkillDisplayName(s),
+    }));
+    let auditData: AuditResponse | null = null;
     try {
-      const auditData = await auditPromise;
+      auditData = await auditPromise;
       if (auditData && ownerRepoForAudit) {
-        const securityLines = buildSecurityLines(
-          auditData,
-          selectedSkills.map((s) => ({
-            slug: getSkillDisplayName(s),
-            displayName: getSkillDisplayName(s),
-          })),
-          ownerRepoForAudit
-        );
+        const securityLines = buildSecurityLines(auditData, auditSkills);
         if (securityLines.length > 0) {
           p.note(securityLines.join('\n'), 'Security Risk Assessments');
         }
@@ -1713,8 +1759,26 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
       // Silently skip — security info is advisory only
     }
 
+    // Gate install on the security audit: risky skills require explicit consent.
+    const highRiskSkills = getHighRiskSkills(auditData, auditSkills);
+    if (highRiskSkills.length > 0) {
+      const list = highRiskSkills
+        .map((s) => `${s.name} 经安全审计标记为 ${s.riskLevel} 风险`)
+        .join('，');
+      p.log.warn(`${pc.red(pc.bold('⚠ 高风险警告：'))} ${list}，请谨慎安装。`);
+    }
+
     if (!options.yes) {
-      const confirmed = await p.confirm({ message: 'Proceed with installation?' });
+      const message =
+        highRiskSkills.length > 0
+          ? `检测到以下技能存在安全风险：${highRiskSkills
+              .map((s) => `${s.name} (${s.riskLevel})`)
+              .join(', ')}。仍要继续安装？`
+          : 'Proceed with installation?';
+      const confirmed = await p.confirm({
+        message,
+        initialValue: highRiskSkills.length === 0,
+      });
 
       if (p.isCancel(confirmed) || !confirmed) {
         p.cancel('Installation cancelled');
@@ -1780,27 +1844,7 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
     const failed = results.filter((r) => !r.success);
     // Track installation result
     // Build skillFiles map: { skillName: relative path to SKILL.md from repo root }
-    const skillFiles: Record<string, string> = {};
-    for (const skill of selectedSkills) {
-      if (blobResult && 'repoPath' in skill) {
-        // Blob-based: repoPath is already the repo-relative path (e.g., "skills/react/SKILL.md")
-        skillFiles[skill.name] = (skill as BlobSkill).repoPath;
-      } else if (tempDir && skill.path === tempDir) {
-        // Skill is at root level of repo
-        skillFiles[skill.name] = 'SKILL.md';
-      } else if (tempDir && skill.path.startsWith(tempDir + sep)) {
-        // Compute path relative to repo root (tempDir), not search path
-        // Use forward slashes for telemetry (URL-style paths)
-        skillFiles[skill.name] =
-          skill.path
-            .slice(tempDir.length + 1)
-            .split(sep)
-            .join('/') + '/SKILL.md';
-      } else {
-        // Local path - skip telemetry for local installs
-        continue;
-      }
-    }
+    const skillFiles = buildSkillFiles(selectedSkills, tempDir, blobResult);
 
     // Normalize source to owner/repo format for telemetry
     const normalizedSource = getOwnerRepo(parsed);

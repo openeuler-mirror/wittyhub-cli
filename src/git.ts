@@ -1,4 +1,4 @@
-import simpleGit from 'simple-git';
+import simpleGit, { type SimpleGitOptions } from 'simple-git';
 import { join, normalize, resolve, sep } from 'path';
 import { mkdtemp, mkdir, rm } from 'fs/promises';
 import { tmpdir } from 'os';
@@ -128,6 +128,15 @@ function createGitClient(extraEnv?: NodeJS.ProcessEnv) {
       'filter.lfs.clean=',
       'filter.lfs.process=',
     ],
+    // simple-git >=3.22 blocks `filter.*` command configs by default via
+    // blockUnsafeOperationsPlugin (vulnerabilityCheck classifies filter.clean/
+    // filter.smudge as allowUnsafeFilter). Whitelist them so the LFS-disabling
+    // configs above actually reach git; they only disable the LFS filter for
+    // this clone, which is the intent.
+    // NOTE: `allowUnsafeFilter` is supported at runtime (@simple-git/argv-parser
+    // VulnerabilityCategoryFlags) but the installed typings fail to resolve it,
+    // hence the cast.
+    unsafe: { allowUnsafeFilter: true } as unknown as Partial<SimpleGitOptions['unsafe']>,
   });
 }
 
