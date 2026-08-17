@@ -4,7 +4,7 @@ import { sanitizeMetadata } from './sanitize.ts';
 import { track } from './telemetry.ts';
 import { isRepoPrivate } from './source-parser.ts';
 import { isRunningInAgent } from './detect-agent.ts';
-import { loadCliConfig } from './config.ts';
+import { SEARCH_URL } from './config.ts';
 
 const RESET = '\x1b[0m';
 const BOLD = '\x1b[1m';
@@ -16,30 +16,21 @@ const YELLOW = '\x1b[33m';
 const RED = '\x1b[31m';
 const GREEN = '\x1b[32m';
 
-// 后端技能搜索接口，可通过 cli.yaml 的 search_url 或 SKILLS_API_URL 覆盖
-const DEFAULT_SEARCH_URL = 'http://localhost:8080/api/v1/index/search';
-const cliSearchConfig = loadCliConfig();
-const SEARCH_URL =
-  typeof cliSearchConfig.search_url === 'string' && cliSearchConfig.search_url.trim()
-    ? cliSearchConfig.search_url.trim()
-    : process.env.SKILLS_API_URL
-      ? `${process.env.SKILLS_API_URL.replace(/\/$/, '')}/api/v1/index/search`
-      : DEFAULT_SEARCH_URL;
-
 function formatInstalls(count: number): string {
-  if (!count || count <= 0) return '';
+  if (count === undefined || count === null || Number.isNaN(count)) return '';
+  if (count <= 0) return '0 installs';
   if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1).replace(/\.0$/, '')}M installs`;
   if (count >= 1_000) return `${(count / 1_000).toFixed(1).replace(/\.0$/, '')}K installs`;
   return `${count} install${count === 1 ? '' : 's'}`;
 }
 
-/** 根据 risk_score 返回带颜色的风险等级标签，未知时返回空串 */
+/** 根据 risk_score 返回带颜色的风险等级标签（格式为 "medium risk" 等，整串同色），未知时返回空串 */
 function formatRiskLevel(riskScore: number | undefined): string {
   if (riskScore === undefined || riskScore === null) return '';
-  if (riskScore <= 20) return `${GREEN}safe${RESET}`;
-  if (riskScore <= 50) return `${GREEN}low${RESET}`;
-  if (riskScore <= 80) return `${YELLOW}medium${RESET}`;
-  return `${RED}high${RESET}`;
+  if (riskScore <= 20) return `${GREEN}safe risk${RESET}`;
+  if (riskScore <= 50) return `${GREEN}low risk${RESET}`;
+  if (riskScore <= 80) return `${YELLOW}medium risk${RESET}`;
+  return `${RED}high risk${RESET}`;
 }
 
 // 在文本中高亮匹配的搜索词（不区分大小写，支持多词）
@@ -259,7 +250,11 @@ async function runSearchPrompt(initialQuery = '', owner?: string): Promise<Searc
         const riskBadge = risk ? ` ${risk}` : '';
         const loadingIndicator = loading && i === 0 ? ` ${DIM}...${RESET}` : '';
 
-        lines.push(`  ${arrow} ${name}${source}${installsBadge}${riskBadge}${loadingIndicator}`);
+        lines.push(`  ${arrow} ${name}${source}${loadingIndicator}`);
+        if (installsBadge || riskBadge) {
+          const meta = [installsBadge.trimStart(), riskBadge.trimStart()].filter(Boolean).join(' ');
+          lines.push(`    ${meta}`);
+        }
         if (skill.description) {
           const descPlain =
             skill.description.length > 80
@@ -478,11 +473,14 @@ ${DIM}  2) npx wittyhub add <owner/repo@skill>${RESET}`;
         ? `${skill.sourceUrl} --skill ${hlName}`
         : `${raw}@${hlName}`;
       const installs = formatInstalls(skill.installs);
+      const installsBadge = installs ? ` ${CYAN}${installs}${RESET}` : '';
       const risk = formatRiskLevel(skill.riskScore);
       const riskBadge = risk ? ` ${risk}` : '';
-      console.log(
-        `${TEXT}${installTarget}${RESET}${installs ? ` ${CYAN}${installs}${RESET}` : ''}${riskBadge}`
-      );
+      console.log(`${TEXT}${installTarget}${RESET}`);
+      if (installsBadge || riskBadge) {
+        const meta = [installsBadge.trimStart(), riskBadge.trimStart()].filter(Boolean).join(' ');
+        console.log(`  ${meta}`);
+      }
       if (skill.description) {
         const descPlain =
           skill.description.length > 100

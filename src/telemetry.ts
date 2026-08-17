@@ -1,17 +1,4 @@
-import { loadCliConfig } from './config.ts';
-
-const DEFAULT_TELEMETRY_URL = 'http://localhost:8080/api/v1/skills/telemetry';
-const DEFAULT_AUDIT_URL = 'http://localhost:8080/api/v1/skills/{skill_id}/audit';
-
-const cliConfig = loadCliConfig();
-const TELEMETRY_URL =
-  typeof cliConfig.telemetry_url === 'string' && cliConfig.telemetry_url.trim()
-    ? cliConfig.telemetry_url.trim()
-    : DEFAULT_TELEMETRY_URL;
-const AUDIT_URL =
-  typeof cliConfig.audit_url === 'string' && cliConfig.audit_url.trim()
-    ? cliConfig.audit_url.trim()
-    : DEFAULT_AUDIT_URL;
+import { AUDIT_URL, TELEMETRY_URL } from './config.ts';
 
 interface InstallTelemetryData {
   event: 'install';

@@ -27,3 +27,29 @@ export function loadCliConfig(): CliConfig {
     return {};
   }
 }
+
+const DEFAULT_SEARCH_URL = 'http://localhost:8080/api/v1/index/search';
+const DEFAULT_TELEMETRY_URL = 'http://localhost:8080/api/v1/skills/telemetry';
+const DEFAULT_AUDIT_URL = 'http://localhost:8080/api/v1/skills/{skill_id}/audit';
+
+const cliConfig = loadCliConfig();
+
+// 后端技能搜索接口，可通过 cli.yaml 的 search_url 或 SKILLS_API_URL 覆盖
+export const SEARCH_URL =
+  typeof cliConfig.search_url === 'string' && cliConfig.search_url.trim()
+    ? cliConfig.search_url.trim()
+    : process.env.SKILLS_API_URL
+      ? `${process.env.SKILLS_API_URL.replace(/\/$/, '')}/api/v1/index/search`
+      : DEFAULT_SEARCH_URL;
+
+// 遥测接口，可通过 cli.yaml 的 telemetry_url 覆盖
+export const TELEMETRY_URL =
+  typeof cliConfig.telemetry_url === 'string' && cliConfig.telemetry_url.trim()
+    ? cliConfig.telemetry_url.trim()
+    : DEFAULT_TELEMETRY_URL;
+
+// 审计接口，可通过 cli.yaml 的 audit_url 覆盖
+export const AUDIT_URL =
+  typeof cliConfig.audit_url === 'string' && cliConfig.audit_url.trim()
+    ? cliConfig.audit_url.trim()
+    : DEFAULT_AUDIT_URL;
