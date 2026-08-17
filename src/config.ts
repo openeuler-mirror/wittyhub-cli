@@ -28,9 +28,9 @@ export function loadCliConfig(): CliConfig {
   }
 }
 
-const DEFAULT_SEARCH_URL = 'http://localhost:8080/api/v1/index/search';
-const DEFAULT_TELEMETRY_URL = 'http://localhost:8080/api/v1/skills/telemetry';
-const DEFAULT_AUDIT_URL = 'http://localhost:8080/api/v1/skills/{skill_id}/audit';
+const DEFAULT_SEARCH_URL = 'https://skillhub.openeuler.org/api/v1/index/search';
+const DEFAULT_TELEMETRY_URL = 'https://skillhub.openeuler.org/api/v1/skills/telemetry';
+const DEFAULT_AUDIT_URL = 'https://skillhub.openeuler.org/api/v1/skills/{skill_id}/audit';
 
 const cliConfig = loadCliConfig();
 
