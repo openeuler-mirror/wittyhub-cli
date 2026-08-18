@@ -116,7 +116,9 @@ ${BOLD}Manage Skills:${RESET}
   remove [skills]      Remove installed skills
   list, ls             List installed skills
   find [query]         Search for skills interactively
-  audit <skill_id>     Show security audit result (risk level + risk signals)
+  audit <source> --skill <skill>
+                       Show security audit result (risk level + risk signals)
+                       e.g. audit https://github.com/huggingface/transformers --skill add-or-fix-type-checking
 
 ${BOLD}Find Options:${RESET}
   --owner <owner>        Search only repositories from a GitHub owner

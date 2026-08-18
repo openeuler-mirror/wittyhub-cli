@@ -1,25 +1,44 @@
 import pc from 'picocolors';
-import { AUDIT_URL } from './config.ts';
-import { track, type SecuritySignal } from './telemetry.ts';
+import { AUDIT_URL, SEARCH_URL } from './config.ts';
+import { track, slugifyTelemetryValue, type SecuritySignal } from './telemetry.ts';
+import { parseSource, getOwnerRepo } from './source-parser.ts';
 
 // ─── Audit command ───
 // 单独查看某个技能的安全审计结果（风险等级 + risk_signals）。
+// 用法与安装命令一致：
+//   wittyhub audit <source> --skill <skill>
+//   wittyhub audit https://github.com/huggingface/transformers --skill add-or-fix-type-checking
+// 兼容旧用法（直接传 skill_id）：
+//   wittyhub audit github/huggingface/transformers/add-or-fix-type-checking
 
 /** 后端支持的 source_type 前缀，作为完整 skill_id 的识别依据 */
 const SOURCE_TYPE_PREFIXES = ['github', 'gitcode', 'gitlab', 'gitee'];
 
 export interface ParseAuditOptionsResult {
-  skillId: string;
+  source: string;
+  skill: string;
   errors: string[];
 }
 
 export function parseAuditOptions(args: string[]): ParseAuditOptionsResult {
-  const skillId = args[0]?.trim() ?? '';
+  let source = '';
+  let skill = '';
   const errors: string[] = [];
-  if (!skillId) {
-    errors.push('Missing skill id');
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '-s' || arg === '--skill') {
+      i++;
+      skill = args[i]?.trim() ?? '';
+    } else if (arg && !arg.startsWith('-')) {
+      source = arg.trim();
+    }
   }
-  return { skillId, errors };
+
+  if (!source) {
+    errors.push('Missing source or skill id');
+  }
+  return { source, skill, errors };
 }
 
 /**
@@ -33,6 +52,66 @@ export function normalizeSkillId(input: string): string {
     return trimmed;
   }
   return `github/${trimmed}`;
+}
+
+/**
+ * 从 <source> + --skill <skill> 推导后端使用的 skill_id，
+ * 与后端 build_skill_id_from_telemetry 的无 path 分支保持一致：
+ *   {source_type}/{owner}/{repo}/{skill_path}
+ */
+export function buildSkillIdFromSource(source: string, skillName: string): string | null {
+  const parsed = parseSource(source);
+  if (!SOURCE_TYPE_PREFIXES.includes(parsed.type)) return null;
+
+  const ownerRepo = getOwnerRepo(parsed);
+  if (!ownerRepo) return null;
+
+  const slugifiedOwnerRepo = ownerRepo.split('/').map(slugifyTelemetryValue).join('/');
+  const skillPath = slugifyTelemetryValue(skillName);
+  if (!skillPath) return null;
+  return `${parsed.type}/${slugifiedOwnerRepo}/${skillPath}`;
+}
+
+/**
+ * 通过后端搜索接口按 skill 名定位真实 skill_id。
+ * 技能的 skill_path 是 SKILL.md 在仓库内的相对路径（如 .ai/skills/add-or-fix-type-checking），
+ * 仅凭 skill 名无法直接推导，因此先搜索再按 source 前缀匹配。
+ */
+export async function resolveSkillIdBySourceAndName(
+  source: string,
+  skillName: string
+): Promise<string | null> {
+  let results: Array<{ skill_id: string; name: string; source_url: string }> = [];
+  try {
+    const params = new URLSearchParams({ q: skillName, limit: '10', mode: 'text' });
+    const res = await fetch(`${SEARCH_URL}?${params.toString()}`);
+    if (res.ok) {
+      const data = (await res.json()) as {
+        results?: Array<{ skill_id: string; name: string; source_url: string }>;
+      };
+      results = data.results ?? [];
+    }
+  } catch {
+    return null;
+  }
+
+  const sourceLower = source.trim().toLowerCase();
+  const matches = results.filter((skill) => {
+    const url = (skill.source_url || '').toLowerCase();
+    if (!url) return false;
+    // source 是完整 URL：source_url 应以其为前缀
+    if (url.startsWith(sourceLower)) return true;
+    // source 是 owner/repo 简写：source_url 中应包含 /owner/repo/
+    if (!sourceLower.includes('://') && sourceLower.split('/').length === 2) {
+      return url.includes(`/${sourceLower}/`);
+    }
+    return false;
+  });
+
+  const exact = matches.find(
+    (skill) => skill.name.toLowerCase() === skillName.trim().toLowerCase()
+  );
+  return exact ? exact.skill_id : matches.length > 0 ? matches[0]!.skill_id : null;
 }
 
 export interface SkillAuditDetail {
@@ -176,27 +255,51 @@ export function buildAuditOutput(skillId: string, data: SkillAuditDetail): strin
 }
 
 export async function runAudit(args: string[]): Promise<void> {
-  const { skillId, errors } = parseAuditOptions(args);
+  const { source, skill, errors } = parseAuditOptions(args);
   if (errors.length > 0) {
     for (const error of errors) console.error(pc.red(error));
-    console.error('Usage: wittyhub audit <skill_id>');
+    console.error('Usage: wittyhub audit <source> --skill <skill>');
+    console.error('       wittyhub audit <skill_id>');
     return;
   }
 
-  const normalized = normalizeSkillId(skillId);
-  const result = await fetchSkillAudit(normalized);
+  // 新格式：<source> + --skill <skill>；优先通过搜索接口定位真实 skill_id
+  // （skill_path 是仓库内相对路径，仅凭名字无法推导），失败时回退到推导逻辑。
+  // 兼容旧格式：无 --skill 时把第一个位置参数当作 skill_id。
+  let skillId: string | null;
+  if (skill) {
+    skillId = await resolveSkillIdBySourceAndName(source, skill);
+    if (!skillId) {
+      const derived = buildSkillIdFromSource(source, skill);
+      if (derived) {
+        console.error(
+          pc.yellow(`Could not locate skill via search; trying derived id: ${derived}`)
+        );
+        skillId = derived;
+      }
+    }
+  } else {
+    skillId = normalizeSkillId(source);
+  }
+  if (!skillId) {
+    console.error(pc.red(`Unable to resolve skill id from source: ${source}`));
+    console.error('Usage: wittyhub audit <source> --skill <skill>');
+    return;
+  }
 
-  track({ event: 'audit', skillId: normalized, found: result.status === 'ok' ? '1' : '0' });
+  const result = await fetchSkillAudit(skillId);
+
+  track({ event: 'audit', skillId, found: result.status === 'ok' ? '1' : '0' });
 
   switch (result.status) {
     case 'ok':
-      for (const line of buildAuditOutput(normalized, result.data)) console.log(line);
+      for (const line of buildAuditOutput(skillId, result.data)) console.log(line);
       break;
     case 'no_audit':
       console.log(`${pc.yellow('No audit result yet.')} ${pc.dim(result.message)}`);
       break;
     case 'not_found':
-      console.error(pc.red(`Skill not found: ${normalized}`));
+      console.error(pc.red(`Skill not found: ${skillId}`));
       break;
     case 'error':
       console.error(pc.red(result.message));

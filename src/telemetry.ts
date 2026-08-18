@@ -116,7 +116,7 @@ export type AuditResponse = Record<string, SkillAuditResult>;
  * Derive the same skill_id that the server uses for telemetry/audit lookups,
  * matching the Python ``build_skill_id_from_telemetry`` logic.
  */
-function slugifyTelemetryValue(value: string): string {
+export function slugifyTelemetryValue(value: string): string {
   const lowered = value.trim().toLowerCase();
   if (!lowered) return '';
   let normalized = lowered.replace(/[^a-z0-9._-]+/g, '-');

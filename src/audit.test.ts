@@ -1,21 +1,147 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { parseAuditOptions, normalizeSkillId, fetchSkillAudit, buildAuditOutput } from './audit.ts';
+import {
+  parseAuditOptions,
+  normalizeSkillId,
+  buildSkillIdFromSource,
+  resolveSkillIdBySourceAndName,
+  fetchSkillAudit,
+  buildAuditOutput,
+} from './audit.ts';
 
 afterEach(() => {
   vi.unstubAllGlobals();
 });
 
 describe('parseAuditOptions', () => {
-  it('extracts the skill id from the first positional arg', () => {
-    expect(parseAuditOptions(['github/a/b/skills/deploy'])).toEqual({
-      skillId: 'github/a/b/skills/deploy',
+  it('extracts the source and --skill', () => {
+    expect(
+      parseAuditOptions([
+        'https://github.com/huggingface/transformers',
+        '--skill',
+        'add-or-fix-type-checking',
+      ])
+    ).toEqual({
+      source: 'https://github.com/huggingface/transformers',
+      skill: 'add-or-fix-type-checking',
       errors: [],
     });
   });
 
-  it('errors when no skill id is provided', () => {
-    expect(parseAuditOptions([])).toEqual({ skillId: '', errors: ['Missing skill id'] });
-    expect(parseAuditOptions(['  '])).toEqual({ skillId: '', errors: ['Missing skill id'] });
+  it('accepts the -s short flag for skill', () => {
+    expect(parseAuditOptions(['vercel-labs/agent-skills', '-s', 'deploy'])).toEqual({
+      source: 'vercel-labs/agent-skills',
+      skill: 'deploy',
+      errors: [],
+    });
+  });
+
+  it('keeps the first positional arg as source when no --skill is given', () => {
+    expect(parseAuditOptions(['github/a/b/skills/deploy'])).toEqual({
+      source: 'github/a/b/skills/deploy',
+      skill: '',
+      errors: [],
+    });
+  });
+
+  it('errors when no source is provided', () => {
+    expect(parseAuditOptions([])).toEqual({
+      source: '',
+      skill: '',
+      errors: ['Missing source or skill id'],
+    });
+  });
+});
+
+describe('buildSkillIdFromSource', () => {
+  it('builds a skill id from a GitHub URL and skill name', () => {
+    expect(
+      buildSkillIdFromSource(
+        'https://github.com/huggingface/transformers',
+        'add-or-fix-type-checking'
+      )
+    ).toBe('github/huggingface/transformers/add-or-fix-type-checking');
+  });
+
+  it('builds a skill id from owner/repo shorthand', () => {
+    expect(buildSkillIdFromSource('vercel-labs/agent-skills', 'deploy-to-vercel')).toBe(
+      'github/vercel-labs/agent-skills/deploy-to-vercel'
+    );
+  });
+
+  it('keeps gitcode source type from a gitcode URL', () => {
+    expect(buildSkillIdFromSource('https://gitcode.com/vercel/agent-skills', 'deploy')).toBe(
+      'gitcode/vercel/agent-skills/deploy'
+    );
+  });
+
+  it('returns null for sources without a supported source type', () => {
+    expect(buildSkillIdFromSource('https://example.com/foo', 'x')).toBeNull();
+  });
+
+  it('returns null when the source has no owner/repo', () => {
+    expect(buildSkillIdFromSource('/tmp/local/path', 'x')).toBeNull();
+  });
+});
+
+describe('resolveSkillIdBySourceAndName', () => {
+  const searchResults = {
+    results: [
+      {
+        skill_id: 'github/huggingface/transformers/.ai/skills/add-or-fix-type-checking',
+        name: 'add-or-fix-type-checking',
+        source_url:
+          'https://github.com/huggingface/transformers/blob/main/.ai/skills/add-or-fix-type-checking/SKILL.md',
+      },
+      {
+        skill_id: 'github/vercel-labs/agent-skills/skills/deploy-to-vercel',
+        name: 'deploy-to-vercel',
+        source_url:
+          'https://github.com/vercel-labs/agent-skills/blob/main/skills/deploy-to-vercel/SKILL.md',
+      },
+    ],
+  };
+
+  it('resolves the skill id from a full GitHub URL', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, status: 200, json: async () => searchResults });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      resolveSkillIdBySourceAndName(
+        'https://github.com/huggingface/transformers',
+        'add-or-fix-type-checking'
+      )
+    ).resolves.toBe('github/huggingface/transformers/.ai/skills/add-or-fix-type-checking');
+  });
+
+  it('resolves the skill id from an owner/repo shorthand', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, status: 200, json: async () => searchResults });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      resolveSkillIdBySourceAndName('vercel-labs/agent-skills', 'deploy-to-vercel')
+    ).resolves.toBe('github/vercel-labs/agent-skills/skills/deploy-to-vercel');
+  });
+
+  it('returns null when no result matches the source', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, status: 200, json: async () => searchResults });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      resolveSkillIdBySourceAndName('https://github.com/unknown/repo', 'x')
+    ).resolves.toBeNull();
+  });
+
+  it('returns null when the search request fails', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ECONNREFUSED')));
+    await expect(
+      resolveSkillIdBySourceAndName('https://github.com/huggingface/transformers', 'x')
+    ).resolves.toBeNull();
   });
 });
 
