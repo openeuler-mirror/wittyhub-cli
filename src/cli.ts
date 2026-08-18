@@ -4,6 +4,7 @@ import { writeFileSync, readFileSync, existsSync, mkdirSync } from 'fs';
 import { basename, join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { runAdd, parseAddOptions, initTelemetry } from './add.ts';
+import { runAudit } from './audit.ts';
 import { runFind } from './find.ts';
 import { runInstallFromLock } from './install.ts';
 import { runList } from './list.ts';
@@ -115,6 +116,7 @@ ${BOLD}Manage Skills:${RESET}
   remove [skills]      Remove installed skills
   list, ls             List installed skills
   find [query]         Search for skills interactively
+  audit <skill_id>     Show security audit result (risk level + risk signals)
 
 ${BOLD}Find Options:${RESET}
   --owner <owner>        Search only repositories from a GitHub owner
@@ -369,6 +371,11 @@ async function main(): Promise<void> {
     case 'ls':
       await runList(restArgs);
       break;
+    case 'audit': {
+      if (!inAgent) showLogo();
+      await runAudit(restArgs);
+      break;
+    }
     case 'check':
     case 'update':
     case 'upgrade':

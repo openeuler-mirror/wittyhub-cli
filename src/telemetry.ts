@@ -47,12 +47,19 @@ interface SyncTelemetryData {
   agents: string;
 }
 
+interface AuditTelemetryData {
+  event: 'audit';
+  skillId: string;
+  found: '1' | '0';
+}
+
 type TelemetryData =
   | InstallTelemetryData
   | RemoveTelemetryData
   | UpdateTelemetryData
   | FindTelemetryData
-  | SyncTelemetryData;
+  | SyncTelemetryData
+  | AuditTelemetryData;
 
 let cliVersion: string | null = null;
 let detectedAgentName: string | null = null;
