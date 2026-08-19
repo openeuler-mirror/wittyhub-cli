@@ -1,12 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-  parseGetOptions,
-  normalizeSkillId,
-  buildSkillIdFromSource,
-  resolveSkillIdBySourceAndName,
-  fetchSkillDetail,
-  buildGetOutput,
-} from './get.ts';
+import { parseGetOptions, fetchSkillDetail, buildGetOutput } from './get.ts';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -49,112 +42,6 @@ describe('parseGetOptions', () => {
       skill: '',
       errors: ['Missing source or skill id'],
     });
-  });
-});
-
-describe('buildSkillIdFromSource', () => {
-  it('builds a skill id from a GitHub URL and skill name', () => {
-    expect(
-      buildSkillIdFromSource(
-        'https://github.com/huggingface/transformers',
-        'add-or-fix-type-checking'
-      )
-    ).toBe('github/huggingface/transformers/add-or-fix-type-checking');
-  });
-
-  it('builds a skill id from owner/repo shorthand', () => {
-    expect(buildSkillIdFromSource('vercel-labs/agent-skills', 'deploy-to-vercel')).toBe(
-      'github/vercel-labs/agent-skills/deploy-to-vercel'
-    );
-  });
-
-  it('keeps gitcode source type from a gitcode URL', () => {
-    expect(buildSkillIdFromSource('https://gitcode.com/vercel/agent-skills', 'deploy')).toBe(
-      'gitcode/vercel/agent-skills/deploy'
-    );
-  });
-
-  it('returns null for sources without a supported source type', () => {
-    expect(buildSkillIdFromSource('https://example.com/foo', 'x')).toBeNull();
-  });
-});
-
-describe('resolveSkillIdBySourceAndName', () => {
-  const searchResults = {
-    results: [
-      {
-        skill_id: 'github/huggingface/transformers/.ai/skills/add-or-fix-type-checking',
-        name: 'add-or-fix-type-checking',
-        source_url:
-          'https://github.com/huggingface/transformers/blob/main/.ai/skills/add-or-fix-type-checking/SKILL.md',
-      },
-      {
-        skill_id: 'github/vercel-labs/agent-skills/skills/deploy-to-vercel',
-        name: 'deploy-to-vercel',
-        source_url:
-          'https://github.com/vercel-labs/agent-skills/blob/main/skills/deploy-to-vercel/SKILL.md',
-      },
-    ],
-  };
-
-  it('resolves the skill id from a full GitHub URL', async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue({ ok: true, status: 200, json: async () => searchResults });
-    vi.stubGlobal('fetch', fetchMock);
-
-    await expect(
-      resolveSkillIdBySourceAndName(
-        'https://github.com/huggingface/transformers',
-        'add-or-fix-type-checking'
-      )
-    ).resolves.toBe('github/huggingface/transformers/.ai/skills/add-or-fix-type-checking');
-  });
-
-  it('resolves the skill id from an owner/repo shorthand', async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue({ ok: true, status: 200, json: async () => searchResults });
-    vi.stubGlobal('fetch', fetchMock);
-
-    await expect(
-      resolveSkillIdBySourceAndName('vercel-labs/agent-skills', 'deploy-to-vercel')
-    ).resolves.toBe('github/vercel-labs/agent-skills/skills/deploy-to-vercel');
-  });
-
-  it('returns null when no result matches the source', async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue({ ok: true, status: 200, json: async () => searchResults });
-    vi.stubGlobal('fetch', fetchMock);
-
-    await expect(
-      resolveSkillIdBySourceAndName('https://github.com/unknown/repo', 'x')
-    ).resolves.toBeNull();
-  });
-
-  it('returns null when the search request fails', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ECONNREFUSED')));
-    await expect(
-      resolveSkillIdBySourceAndName('https://github.com/huggingface/transformers', 'x')
-    ).resolves.toBeNull();
-  });
-});
-
-describe('normalizeSkillId', () => {
-  it('passes through full skill ids with a source type prefix', () => {
-    expect(normalizeSkillId('gitcode/vercel/agent-skills/.skills/deploy-to-vercel')).toBe(
-      'gitcode/vercel/agent-skills/.skills/deploy-to-vercel'
-    );
-    expect(normalizeSkillId('github/vercel-labs/agent-skills/skills/deploy-to-vercel')).toBe(
-      'github/vercel-labs/agent-skills/skills/deploy-to-vercel'
-    );
-  });
-
-  it('prepends github/ for shorthand without a source type prefix', () => {
-    expect(normalizeSkillId('vercel-labs/agent-skills/skills/deploy-to-vercel')).toBe(
-      'github/vercel-labs/agent-skills/skills/deploy-to-vercel'
-    );
   });
 });
 

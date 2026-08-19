@@ -10,6 +10,7 @@ export interface CliConfig {
   audit_url?: string;
   search_url?: string;
   get_url?: string;
+  list_url?: string;
 }
 
 export function loadCliConfig(): CliConfig {
@@ -33,6 +34,7 @@ const DEFAULT_SEARCH_URL = 'https://skillhub.openeuler.org/api/v1/index/search';
 const DEFAULT_TELEMETRY_URL = 'https://skillhub.openeuler.org/api/v1/skills/telemetry';
 const DEFAULT_AUDIT_URL = 'https://skillhub.openeuler.org/api/v1/skills/{skill_id}/audit';
 const DEFAULT_GET_URL = 'https://skillhub.openeuler.org/api/v1/skills/{skill_id}';
+const DEFAULT_LIST_URL = 'https://skillhub.openeuler.org/api/v1/skills/';
 
 const cliConfig = loadCliConfig();
 
@@ -61,3 +63,10 @@ export const GET_URL =
   typeof cliConfig.get_url === 'string' && cliConfig.get_url.trim()
     ? cliConfig.get_url.trim()
     : DEFAULT_GET_URL;
+
+// Skill 列表接口（按仓库过滤定位技能），可通过 cli.yaml 的 list_url 覆盖；
+// 未配置时从 get_url 推导（/api/v1/skills/{skill_id} → /api/v1/skills/）
+export const LIST_URL =
+  typeof cliConfig.list_url === 'string' && cliConfig.list_url.trim()
+    ? cliConfig.list_url.trim()
+    : GET_URL.replace(/\{skill_id\}[^/]*$/, '') || DEFAULT_LIST_URL;
