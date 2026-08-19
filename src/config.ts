@@ -9,6 +9,7 @@ export interface CliConfig {
   telemetry_url?: string;
   audit_url?: string;
   search_url?: string;
+  get_url?: string;
 }
 
 export function loadCliConfig(): CliConfig {
@@ -31,6 +32,7 @@ export function loadCliConfig(): CliConfig {
 const DEFAULT_SEARCH_URL = 'https://skillhub.openeuler.org/api/v1/index/search';
 const DEFAULT_TELEMETRY_URL = 'https://skillhub.openeuler.org/api/v1/skills/telemetry';
 const DEFAULT_AUDIT_URL = 'https://skillhub.openeuler.org/api/v1/skills/{skill_id}/audit';
+const DEFAULT_GET_URL = 'https://skillhub.openeuler.org/api/v1/skills/{skill_id}';
 
 const cliConfig = loadCliConfig();
 
@@ -53,3 +55,9 @@ export const AUDIT_URL =
   typeof cliConfig.audit_url === 'string' && cliConfig.audit_url.trim()
     ? cliConfig.audit_url.trim()
     : DEFAULT_AUDIT_URL;
+
+// Skill 详情接口，可通过 cli.yaml 的 get_url 覆盖
+export const GET_URL =
+  typeof cliConfig.get_url === 'string' && cliConfig.get_url.trim()
+    ? cliConfig.get_url.trim()
+    : DEFAULT_GET_URL;

@@ -40,6 +40,12 @@ interface FindTelemetryData {
   interactive?: '1';
 }
 
+interface GetTelemetryData {
+  event: 'get';
+  skillId: string;
+  found?: string;
+}
+
 interface SyncTelemetryData {
   event: 'experimental_sync';
   skillCount: string;
@@ -52,6 +58,7 @@ type TelemetryData =
   | RemoveTelemetryData
   | UpdateTelemetryData
   | FindTelemetryData
+  | GetTelemetryData
   | SyncTelemetryData;
 
 let cliVersion: string | null = null;
