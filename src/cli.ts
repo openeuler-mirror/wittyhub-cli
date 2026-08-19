@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import { runAdd, parseAddOptions, initTelemetry } from './add.ts';
 import { runAudit } from './audit.ts';
 import { runFind } from './find.ts';
+import { runGet } from './get.ts';
 import { runInstallFromLock } from './install.ts';
 import { runList } from './list.ts';
 import { removeCommand, parseRemoveOptions } from './remove.ts';
@@ -119,6 +120,9 @@ ${BOLD}Manage Skills:${RESET}
   audit <source> --skill <skill>
                        Show security audit result (risk level + risk signals)
                        e.g. audit https://github.com/huggingface/transformers --skill add-or-fix-type-checking
+  get <source> --skill <skill>
+                       View skill details (author/category/version/description/tags)
+                       e.g. get https://github.com/huggingface/transformers --skill add-or-fix-type-checking
 
 ${BOLD}Find Options:${RESET}
   --owner <owner>        Search only repositories from a GitHub owner
@@ -376,6 +380,11 @@ async function main(): Promise<void> {
     case 'audit': {
       if (!inAgent) showLogo();
       await runAudit(restArgs);
+      break;
+    }
+    case 'get': {
+      if (!inAgent) showLogo();
+      await runGet(restArgs);
       break;
     }
     case 'check':
