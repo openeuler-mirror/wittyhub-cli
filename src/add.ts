@@ -1,10 +1,13 @@
 import { createHash } from 'node:crypto';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
-import { existsSync } from 'fs';
-import { homedir } from 'os';
-import { sep, join, dirname } from 'path';
-import { parseSource, getOwnerRepo, parseOwnerRepo, isRepoPrivate } from './source-parser.ts';
+import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { homedir, tmpdir } from 'node:os';
+import { sep, join, dirname } from 'node:path';
+import { getOwnerRepo, parseOwnerRepo, isRepoPrivate } from './source-parser.ts';
+import { DOWNLOAD_URL, SEARCH_URL } from './config.ts';
 import { stripTerminalEscapes } from './sanitize.ts';
 import { searchMultiselect } from './prompts/search-multiselect.ts';
 
@@ -31,7 +34,7 @@ export function getLockSource(parsedUrl: string, normalizedSource: string | null
   const isSSH = parsedUrl.startsWith('git@') || parsedUrl.startsWith('ssh://');
   return isSSH ? parsedUrl : normalizedSource;
 }
-import { cloneRepo, cleanupTempDir, GitCloneError } from './git.ts';
+import { cleanupTempDir, GitCloneError } from './git.ts';
 import { discoverSkills, getSkillDisplayName, filterSkills } from './skills.ts';
 import {
   installSkillForAgent,
@@ -69,10 +72,8 @@ import {
   saveSelectedAgents,
 } from './skill-lock.ts';
 import { addSkillToLocalLock, computeSkillFolderHash } from './local-lock.ts';
-import type { Skill, AgentType } from './types.ts';
+import type { Skill, AgentType, ParsedSource } from './types.ts';
 import {
-  tryBlobInstall,
-  BLOB_ALLOWED_REPOS,
   getSkillFolderHashFromTree,
   fetchRepoTree,
   type BlobSkill,
@@ -81,6 +82,169 @@ import {
 import packageJson from '../package.json' with { type: 'json' };
 export function initTelemetry(version: string): void {
   setVersion(version);
+}
+
+const execFileAsync = promisify(execFile);
+
+/**
+ * Normalize a repo URL or owner/repo shorthand for matching against
+ * `source_url` returned by the search API. Strips scheme, `.git` suffix,
+ * trailing slashes, and lowercases. e.g.
+ *   "https://github.com/foo/bar.git/" → "github.com/foo/bar"
+ */
+function normalizeRepoRef(input: string): string {
+  let s = input.trim().toLowerCase();
+  s = s.replace(/^(https?:\/\/|git:\/\/|ssh:\/\/)/, '');
+  s = s.replace(/^git@([^:]+):/, '$1/');
+  s = s.replace(/\.git$/, '');
+  s = s.replace(/\/+$/, '');
+  return s;
+}
+
+/**
+ * Heuristic: does `source` look like a repo URL or owner/repo shorthand
+ * (rather than a full skill_id)?
+ *
+ * - HTTP(S)/SSH/git URLs → repo URL
+ * - `git@host:owner/repo` → repo URL
+ * - owner/repo shorthand with exactly one slash → repo URL
+ * - anything else (including full skill_ids like
+ *   "github/owner/repo/skills/foo") → treat as skill_id
+ */
+function looksLikeRepoSource(source: string): boolean {
+  const s = source.trim();
+  if (s.startsWith('http://') || s.startsWith('https://')) return true;
+  if (s.startsWith('git@') || s.startsWith('ssh://') || s.startsWith('git://')) return true;
+  // owner/repo shorthand: exactly one slash, no colon, no spaces
+  const slashCount = (s.match(/\//g) || []).length;
+  return slashCount <= 1 && !s.includes(':') && !/\s/.test(s);
+}
+
+interface SearchApiEnvelope {
+  code?: number;
+  msg?: string;
+  data?: {
+    results?: Array<{
+      skill_id: string;
+      name: string;
+      source: string;
+      source_url: string;
+    }>;
+    total?: number;
+  };
+  // Some deployments may skip the wrapper; keep the top-level fields as
+  // fallback so this works with both shapes.
+  results?: Array<{
+    skill_id: string;
+    name: string;
+    source: string;
+    source_url: string;
+  }>;
+  total?: number;
+}
+
+/**
+ * Resolve `source` to a skill_id that the download API understands.
+ *
+ * Two input forms are supported:
+ *   1. `source` is already a full skill_id (e.g.
+ *      "github/owner/repo/.ai/skills/foo") → returned as-is.
+ *   2. `source` is a repo URL / owner/repo shorthand AND `skillName` is
+ *      provided → query the SEARCH_URL for that skill name, prefer results
+ *      whose `source_url` is part of the input repo, and return the first
+ *      match's `skill_id`.
+ *
+ * Throws on search failure or no match.
+ */
+async function resolveSkillId(source: string, skillName: string | undefined): Promise<string> {
+  // Form 1: already a skill_id.
+  if (!looksLikeRepoSource(source)) {
+    return source;
+  }
+
+  // Form 2: repo URL / shorthand — needs --skill.
+  if (!skillName || !skillName.trim()) {
+    throw new Error(
+      `源 "${source}" 看起来是仓库地址，需要同时传入 --skill <skill_name> 才能定位具体技能。`
+    );
+  }
+
+  const params = new URLSearchParams({
+    q: skillName.trim(),
+    limit: '20',
+    mode: 'text',
+    scope: 'summary',
+  });
+  const searchUrl = `${SEARCH_URL}?${params.toString()}`;
+
+  let res: Response;
+  try {
+    res = await fetch(searchUrl);
+  } catch {
+    throw new Error(`无法连接搜索服务: ${SEARCH_URL}`);
+  }
+  if (!res.ok) {
+    throw new Error(`搜索服务返回 HTTP ${res.status}`);
+  }
+
+  const payload = (await res.json()) as SearchApiEnvelope;
+  // API wraps responses in { code, msg, data }; fall back to the top-level
+  // shape for deployments without the wrapper.
+  const results = payload.data?.results ?? payload.results ?? [];
+  if (results.length === 0) {
+    throw new Error(`未找到名称匹配 "${skillName}" 的技能。`);
+  }
+
+  // Match results whose source_url lives inside the input repo. The API
+  // returns source_url like
+  //   "https://github.com/owner/repo/blob/main/<path>/SKILL.md"
+  // so we do prefix matching after normalization, not exact equality.
+  const wantedRef = normalizeRepoRef(source);
+  const match =
+    results.find((r) => {
+      const ref = normalizeRepoRef(r.source_url);
+      return ref === wantedRef || ref.startsWith(`${wantedRef}/`);
+    }) ?? results[0];
+  if (!match) {
+    throw new Error(`未找到名称匹配 "${skillName}" 的技能。`);
+  }
+  return match.skill_id;
+}
+
+/**
+ * Download a packaged skill archive from the wittyhub API and extract it
+ * into a fresh temporary directory. Mirrors the layout produced by the
+ * backend's `git archive --format=zip` endpoint.
+ *
+ * Returns the temp directory path containing the extracted skill files.
+ * Throws on download or extraction failure so the caller can surface an error.
+ */
+async function downloadAndExtractSkill(skillId: string): Promise<string> {
+  const downloadUrl = DOWNLOAD_URL.replace('{skill_id}', encodeURIComponent(skillId));
+
+  const response = await fetch(downloadUrl);
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status} ${response.statusText}`);
+  }
+
+  const tempDir = await mkdtemp(join(tmpdir(), 'skills-'));
+  const zipPath = join(tempDir, '.skill.zip');
+  try {
+    const buffer = Buffer.from(await response.arrayBuffer());
+    await writeFile(zipPath, buffer);
+
+    try {
+      await execFileAsync('unzip', ['-q', zipPath, '-d', tempDir]);
+    } catch {
+      throw new Error(
+        "Failed to extract skill archive. Ensure the 'unzip' command is available on PATH."
+      );
+    }
+  } finally {
+    await rm(zipPath, { force: true });
+  }
+
+  return tempDir;
 }
 
 // ─── Security Advisory ───
@@ -1131,26 +1295,48 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
   try {
     const spinner = p.spinner();
 
-    spinner.start('Parsing source...');
-    const parsed = parseSource(source);
-    spinner.stop(
-      `Source: ${parsed.type === 'local' ? parsed.localPath! : parsed.url}${parsed.ref ? ` @ ${pc.yellow(parsed.ref)}` : ''}${parsed.subpath ? ` (${parsed.subpath})` : ''}${parsed.skillFilter ? ` ${pc.dim('@')}${pc.cyan(parsed.skillFilter)}` : ''}`
-    );
+    // Step 1+2 (replaced): resolve `source` to a skill_id, then download a
+    // packaged archive from the wittyhub API. The ZIP is extracted into a
+    // temp dir and fed into the existing discoverSkills flow.
+    //
+    // Two input forms are supported:
+    //   - full skill_id, e.g. "github/owner/repo/.ai/skills/foo"
+    //   - repo URL + --skill <name>, e.g.
+    //     `add https://github.com/owner/repo --skill foo`
+    //     → here we query SEARCH_URL to look up the skill_id.
+    const skillNameForLookup = options.skill?.[0];
+    let skillId: string;
+    try {
+      skillId = await resolveSkillId(source, skillNameForLookup);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      p.outro(pc.red(message));
+      process.exit(1);
+    }
 
-    // Kick off the repo privacy check early so it runs in parallel with
-    // cloning/discovering/installing. The result is only needed later for
-    // telemetry gating — it should never block user-visible output.
-    const ownerRepoRaw = getOwnerRepo(parsed);
-    const repoPrivacyPromise: Promise<boolean | null> = (() => {
-      // 限制私有仓检查只对 GitHub 生效
-      if (!ownerRepoRaw || parsed.type !== 'github') return Promise.resolve(null);
-      const ownerRepo = parseOwnerRepo(ownerRepoRaw);
-      if (!ownerRepo) return Promise.resolve(null);
-      return isRepoPrivate(ownerRepo.owner, ownerRepo.repo).catch(() => null);
-    })();
+    spinner.start(`Downloading skill ${pc.cyan(skillId)} from API...`);
+    try {
+      tempDir = await downloadAndExtractSkill(skillId);
+    } catch (e) {
+      spinner.stop(pc.red('Download failed'));
+      const message = e instanceof Error ? e.message : String(e);
+      p.outro(pc.red(`Failed to download skill "${skillId}": ${message}`));
+      process.exit(1);
+    }
+    spinner.stop(`Skill archive downloaded from ${pc.cyan('API')}`);
 
-    // Block openclaw sources unless explicitly opted in
-    const sourceOwner = ownerRepoRaw?.split('/')[0]?.toLowerCase();
+    // Synthetic parsed source consumed by downstream telemetry/lock-file logic.
+    // `skillId` is the API skill_id (not a git URL), so getOwnerRepo() returns
+    // null — telemetry gating and lock-file writes are skipped for now.
+    const parsed: ParsedSource = {
+      type: 'git',
+      url: skillId,
+    };
+    const repoPrivacyPromise: Promise<boolean | null> = Promise.resolve(null);
+
+    // Block openclaw sources unless explicitly opted in (defensive — based on
+    // the raw source prefix since we no longer run parseSource).
+    const sourceOwner = source.split('/')[0]?.toLowerCase();
     if (sourceOwner === 'openclaw' && !options.dangerouslyAcceptOpenclawRisks) {
       console.log();
       p.log.warn(pc.yellow(pc.bold('⚠ OpenClaw skills are unverified community submissions.')));
@@ -1168,93 +1354,19 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
       process.exit(1);
     }
 
-    // Handle well-known skills from arbitrary URLs
-    if (parsed.type === 'well-known') {
-      await handleWellKnownSkills(source, parsed.url, options, spinner);
-      return;
-    }
-
-    // If skillFilter is present from @skill syntax (e.g., owner/repo@skill-name),
-    // merge it into options.skill
-    if (parsed.skillFilter) {
-      options.skill = options.skill || [];
-      if (!options.skill.includes(parsed.skillFilter)) {
-        options.skill.push(parsed.skillFilter);
-      }
-    }
-
     // Include internal skills when a specific skill is explicitly requested
-    // (via --skill or @skill syntax)
+    // (via --skill). The @skill source syntax is no longer parsed now that
+    // `source` is forwarded verbatim as a skill_id.
     const includeInternal = !!(options.skill && options.skill.length > 0);
 
     let skills: Skill[];
     let blobResult: BlobInstallResult | null = null;
 
-    if (parsed.type === 'local') {
-      // Use local path directly, no cloning needed
-      spinner.start('Validating local path...');
-      if (!existsSync(parsed.localPath!)) {
-        spinner.stop(pc.red('Path not found'));
-        p.outro(pc.red(`Local path does not exist: ${parsed.localPath}`));
-        process.exit(1);
-      }
-      spinner.stop('Local path validated');
-
-      spinner.start('Discovering skills...');
-      skills = await discoverSkills(parsed.localPath!, parsed.subpath, {
-        includeInternal,
-        fullDepth: options.fullDepth,
-      });
-    } else if (parsed.type === 'github' && !options.fullDepth) {
-      // Try the blob-based fast install for GitHub sources; skip for --full-depth.
-      // Eligible per repo (a BLOB_ALLOWED_REPOS entry = self-hosted download URL) or
-      // per owner (BLOB_ALLOWED_OWNERS = all their repos, skills.sh-hosted).
-      const BLOB_ALLOWED_OWNERS = ['vercel', 'vercel-labs', 'heygen-com'];
-      const ownerRepo = getOwnerRepo(parsed);
-      const owner = ownerRepo?.split('/')[0]?.toLowerCase();
-      const isSelfHostedRepo =
-        !!ownerRepo && Object.hasOwn(BLOB_ALLOWED_REPOS, ownerRepo.toLowerCase());
-      if (ownerRepo && owner && (isSelfHostedRepo || BLOB_ALLOWED_OWNERS.includes(owner))) {
-        spinner.start('Fetching skills...');
-        blobResult = await tryBlobInstall(ownerRepo, {
-          subpath: parsed.subpath,
-          skillFilter: parsed.skillFilter,
-          ref: parsed.ref,
-          getToken: getGitHubToken,
-          includeInternal,
-        });
-        if (!blobResult) {
-          spinner.stop(pc.dim('Falling back to clone...'));
-        }
-      }
-
-      if (blobResult) {
-        skills = blobResult.skills;
-        spinner.stop(`Found ${pc.green(skills.length)} skill${skills.length > 1 ? 's' : ''}`);
-      } else {
-        // Blob failed — fall back to git clone
-        spinner.start('Cloning repository...');
-        tempDir = await cloneRepo(parsed.url, parsed.ref);
-        spinner.stop('Repository cloned');
-
-        spinner.start('Discovering skills...');
-        skills = await discoverSkills(tempDir, parsed.subpath, {
-          includeInternal,
-          fullDepth: options.fullDepth,
-        });
-      }
-    } else {
-      // GitLab, git URL, or --full-depth: always clone
-      spinner.start('Cloning repository...');
-      tempDir = await cloneRepo(parsed.url, parsed.ref);
-      spinner.stop('Repository cloned');
-
-      spinner.start('Discovering skills...');
-      skills = await discoverSkills(tempDir, parsed.subpath, {
-        includeInternal,
-        fullDepth: options.fullDepth,
-      });
-    }
+    spinner.start('Discovering skills...');
+    skills = await discoverSkills(tempDir, undefined, {
+      includeInternal,
+      fullDepth: options.fullDepth,
+    });
 
     if (skills.length === 0) {
       spinner.stop(pc.red('No skills found'));
@@ -1862,6 +1974,8 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
         // For sources without a privacy check, repoPrivacyPromise returns null,
         // so we always send telemetry.
         if (isPrivate === false || (isPrivate === null && parsed.type !== 'github')) {
+          console.log('[telemetry-debug-1]', 
+            JSON.stringify({ isPrivate, parsedType: parsed.type, normalizedSource, sourceType: parsed.type, skillFiles: JSON.stringify(skillFiles) }));
           track({
             event: 'install',
             source: normalizedSource,
@@ -1874,6 +1988,8 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
         }
       } else {
         // If we can't parse owner/repo, still send telemetry (for non-GitHub sources)
+          console.log('[telemetry-debug-2]', 
+            JSON.stringify({parsedType: parsed.type, normalizedSource, sourceType: parsed.type, skillFiles: JSON.stringify(skillFiles) }));
         track({
           event: 'install',
           source: normalizedSource,
@@ -1905,7 +2021,10 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
             const skillPathValue = skillFiles[skill.name];
 
             if (blobResult && skillPathValue) {
-              const hash = getSkillFolderHashFromTree(blobResult.tree, skillPathValue);
+              const hash = getSkillFolderHashFromTree(
+                (blobResult as BlobInstallResult).tree,
+                skillPathValue
+              );
               if (hash) skillFolderHash = hash;
             } else if (parsed.type === 'github' && skillPathValue && cachedTree) {
               const hash = getSkillFolderHashFromTree(cachedTree, skillPathValue);
