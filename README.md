@@ -6,7 +6,7 @@ The CLI for the open agent skills ecosystem.
 Supports **OpenCode**, **Claude Code**, **Codex**, **Cursor**, and [68 more](#supported-agents).
 <!-- agent-list:end -->
 
-[![skills.sh](https://skills.sh/b/vercel-labs/skills)](https://skills.sh/vercel-labs/skills)
+[![SkillHub](https://skillhub.openeuler.org/)](https://skillhub.openeuler.org/)
 
 ## Install a Skill
 
@@ -233,7 +233,7 @@ Skills let agents perform specialized tasks like:
 - Creating PRs following your team's conventions
 - Integrating with external tools (Linear, Notion, etc.)
 
-Discover skills at **[skills.sh](https://skills.sh)**
+Discover skills at **[SkillHub](https://skillhub.openeuler.org/)**
 
 ## Supported Agents
 

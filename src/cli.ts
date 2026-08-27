@@ -100,7 +100,7 @@ function showBanner(): void {
   console.log();
   console.log(`${DIM}try:${RESET} npx wittyhub add vercel-labs/agent-skills`);
   console.log();
-  console.log(`Discover more skills at ${TEXT}https://skills.sh/${RESET}`);
+  console.log(`Discover more skills at ${TEXT}https://skillhub.openeuler.org/${RESET}`);
   console.log();
 }
 
@@ -203,7 +203,7 @@ ${BOLD}Examples:${RESET}
   ${DIM}$${RESET} wittyhub experimental_sync              ${DIM}# sync from node_modules${RESET}
   ${DIM}$${RESET} wittyhub experimental_sync -y           ${DIM}# sync without prompts${RESET}
 
-Discover more skills at ${TEXT}https://skills.sh/${RESET}
+Discover more skills at ${TEXT}https://skillhub.openeuler.org/${RESET}
 `);
 }
 
@@ -234,7 +234,7 @@ ${BOLD}Examples:${RESET}
   ${DIM}$${RESET} wittyhub remove --all                      ${DIM}# remove all skills${RESET}
   ${DIM}$${RESET} wittyhub remove --skill '*' -a cursor      ${DIM}# remove all skills from cursor${RESET}
 
-Discover more skills at ${TEXT}https://skills.sh/${RESET}
+Discover more skills at ${TEXT}https://skillhub.openeuler.org/${RESET}
 `);
 }
 
@@ -297,7 +297,9 @@ Describe when this skill should be used.
     `  ${DIM}URL:${RESET}     Host the file, then ${TEXT}npx wittyhub add https://example.com/${displayPath}${RESET}`
   );
   console.log();
-  console.log(`Browse existing skills for inspiration at ${TEXT}https://skills.sh/${RESET}`);
+  console.log(
+    `Browse existing skills for inspiration at ${TEXT}https://skillhub.openeuler.org/${RESET}`
+  );
   console.log();
 }
 
