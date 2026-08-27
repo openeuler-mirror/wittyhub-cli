@@ -17,6 +17,8 @@ This file provides guidance to AI coding agents working on the `wittyhub` CLI co
 | `wittyhub experimental_sync`  | Sync skills from node_modules into agent dirs       |
 | `wittyhub list`               | List installed skills (alias: `ls`)                 |
 | `wittyhub update [skills...]` | Update skills to latest versions                    |
+| `wittyhub audit <source> --skill <skill>` | Show security audit result (risk level + risk signals) |
+| `wittyhub get <source> --skill <skill>` | View skill details (author/category/version/description/tags) |
 | `wittyhub init [name]`        | Create a new SKILL.md template                      |
 
 Aliases: `wittyhub a` works for `add`. `wittyhub i`, `wittyhub install` (no args) restore from `skills-lock.json`. `wittyhub ls` works for `list`. `wittyhub experimental_install` restores from `skills-lock.json`. `wittyhub experimental_sync` crawls `node_modules` for skills.
@@ -30,8 +32,12 @@ src/
 ├── add.ts           # Core add command logic
 ├── add-prompt.test.ts # Add prompt behavior tests
 ├── add.test.ts      # Add command tests
+├── audit.ts         # Security audit command (risk level + risk signals)
+├── audit.test.ts    # Audit command tests
 ├── constants.ts      # Shared constants
 ├── find.ts           # Find/search command
+├── get.ts            # Get command - view skill details
+├── get.test.ts       # Get command tests
 ├── list.ts          # List installed skills command
 ├── list.test.ts     # List command tests
 ├── remove.ts         # Remove command implementation
