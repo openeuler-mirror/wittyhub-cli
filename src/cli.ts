@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { writeFileSync, readFileSync, existsSync, mkdirSync } from 'fs';
-import { basename, join, dirname } from 'path';
+import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { runAdd, parseAddOptions, initTelemetry } from './add.ts';
 import { runAudit } from './audit.ts';
@@ -137,7 +137,7 @@ ${BOLD}Update Options:${RESET}
 
 ${BOLD}Project:${RESET}
   experimental_install Restore skills from skills-lock.json
-  init [name]          Initialize a skill (creates <name>/SKILL.md or ./SKILL.md)
+  init [name]          Initialize a skill (creates <name>/SKILL.md; defaults to my-skill/)
   experimental_sync    Sync skills from node_modules into agent directories
 
 ${BOLD}Add Options:${RESET}
@@ -204,6 +204,24 @@ Discover more skills at ${TEXT}https://skillhub.openeuler.org/${RESET}
 `);
 }
 
+function showInitHelp(): void {
+  console.log(`
+${BOLD}Usage:${RESET} wittyhub init [name]
+
+${BOLD}Description:${RESET}
+  Initialize a new skill by creating a SKILL.md template.
+
+${BOLD}Arguments:${RESET}
+  name              Optional skill name. Creates <name>/SKILL.md.
+                    If omitted, defaults to my-skill/ (never the cwd itself).
+
+${BOLD}Examples:${RESET}
+  ${DIM}$${RESET} wittyhub init                    ${DIM}# creates my-skill/SKILL.md${RESET}
+  ${DIM}$${RESET} wittyhub init my-skill           ${DIM}# creates my-skill/SKILL.md${RESET}
+  ${DIM}$${RESET} wittyhub init code-reviewer      ${DIM}# creates code-reviewer/SKILL.md${RESET}
+`);
+}
+
 function showRemoveHelp(): void {
   console.log(`
 ${BOLD}Usage:${RESET} wittyhub remove [skills...] [options]
@@ -237,25 +255,26 @@ Discover more skills at ${TEXT}https://skillhub.openeuler.org/${RESET}
 
 function runInit(args: string[]): void {
   const cwd = process.cwd();
-  const skillName = args[0] || basename(cwd);
-  const hasName = args[0] !== undefined;
+  // Default to "my-skill" so `wittyhub init` always creates a dedicated
+  // subdirectory instead of dropping SKILL.md into the current directory.
+  const skillName = args[0] ?? 'my-skill';
 
-  const skillDir = hasName ? join(cwd, skillName) : cwd;
+  const skillDir = join(cwd, skillName);
   const skillFile = join(skillDir, 'SKILL.md');
-  const displayPath = hasName ? `${skillName}/SKILL.md` : 'SKILL.md';
+  const displayPath = `${skillName}/SKILL.md`;
 
   if (existsSync(skillFile)) {
     console.log(`${TEXT}Skill already exists at ${DIM}${displayPath}${RESET}`);
     return;
   }
 
-  if (hasName) {
-    mkdirSync(skillDir, { recursive: true });
-  }
+  mkdirSync(skillDir, { recursive: true });
 
   const skillContent = `---
 name: ${skillName}
 description: A brief description of what this skill does
+version: 0.1.0  # optional; increment as needed
+category: others  # optional;change if needed — full list at https://gitcode.com/openeuler/openEuler-skills
 ---
 
 # ${skillName}
@@ -285,13 +304,13 @@ Describe when this skill should be used.
   console.log(
     `  2. Update the ${TEXT}name${RESET} and ${TEXT}description${RESET} in the frontmatter`
   );
+  console.log(
+    `  3. Optionally set ${TEXT}version${RESET} and ${TEXT}category${RESET} (see the comment in ${TEXT}${displayPath}${RESET} for the full list of categories)`
+  );
   console.log();
   console.log(`${DIM}Publishing:${RESET}`);
   console.log(
-    `  ${DIM}GitHub:${RESET}  Push to a repo, then ${TEXT}npx wittyhub add <owner>/<repo>${RESET}`
-  );
-  console.log(
-    `  ${DIM}URL:${RESET}     Host the file, then ${TEXT}npx wittyhub add https://example.com/${displayPath}${RESET}`
+    `  Submit your skill to ${TEXT}https://gitcode.com/openeuler/openEuler-skills${RESET}`
   );
   console.log();
   console.log(
@@ -328,6 +347,11 @@ async function main(): Promise<void> {
       await runFind(restArgs);
       break;
     case 'init':
+      // Check for --help or -h flag
+      if (restArgs.includes('--help') || restArgs.includes('-h')) {
+        showInitHelp();
+        break;
+      }
       if (!inAgent) showLogo();
       console.log();
       runInit(restArgs);
