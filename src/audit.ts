@@ -93,15 +93,17 @@ export async function fetchSkillAudit(
       return { status: 'no_audit', message: String(data.error) };
     }
 
+    const auditData = (data.data || data) as Record<string, unknown>;
+
     return {
       status: 'ok',
       data: {
-        risk_level: (data.risk_level as string) ?? 'unknown',
-        risk_score: (data.risk_score as number) ?? null,
-        risk_signals: (data.risk_signals as SecuritySignal[]) ?? [],
-        audited_at: (data.audited_at as string) ?? null,
-        audit_type: (data.audit_type as string) ?? null,
-        details: (data.details as Record<string, unknown>) ?? null,
+        risk_level: (auditData.risk_level as string) ?? 'unknown',
+        risk_score: (auditData.risk_score as number) ?? null,
+        risk_signals: (auditData.risk_signals as SecuritySignal[]) ?? [],
+        audited_at: (auditData.audited_at as string) ?? null,
+        audit_type: (auditData.audit_type as string) ?? null,
+        details: (auditData.details as Record<string, unknown>) ?? null,
       },
     };
   } finally {

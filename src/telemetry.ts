@@ -193,11 +193,12 @@ export async function fetchAuditData(
         if (response.ok) {
           const data = (await response.json()) as Record<string, unknown>;
           if (!data.error) {
+            const auditData = (data.data || data) as Record<string, unknown>;
             results[skillName] = {
-              risk_level: (data.risk_level as SkillAuditResult['risk_level']) ?? 'unknown',
-              risk_score: (data.risk_score as number) ?? null,
-              risk_signals: (data.risk_signals as SecuritySignal[]) ?? [],
-              audited_at: (data.audited_at as string) ?? null,
+              risk_level: (auditData.risk_level as SkillAuditResult['risk_level']) ?? 'unknown',
+              risk_score: (auditData.risk_score as number) ?? null,
+              risk_signals: (auditData.risk_signals as SecuritySignal[]) ?? [],
+              audited_at: (auditData.audited_at as string) ?? null,
             };
           }
         }

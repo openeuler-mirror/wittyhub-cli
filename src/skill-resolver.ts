@@ -74,16 +74,18 @@ export async function listSkillsByRepo(source: string): Promise<SkillRef[]> {
   try {
     const res = await fetch(url);
     if (!res.ok) return [];
-    const data = (await res.json()) as {
+    const raw = (await res.json()) as Record<string, unknown>;
+    const data = (raw.data || raw) as {
       skills?: Array<{ skill_id: string; name: string; source_url?: string | null }>;
     };
-    return (data.skills ?? [])
+    const result = (data.skills ?? [])
       .filter((skill) => skill && typeof skill.skill_id === 'string' && skill.skill_id)
       .map((skill) => ({
         skill_id: skill.skill_id,
         name: skill.name ?? '',
         source_url: skill.source_url ?? '',
       }));
+    return result;
   } catch {
     return [];
   }
@@ -100,7 +102,8 @@ async function resolveBySearch(source: string, skillName: string): Promise<strin
     const params = new URLSearchParams({ q: skillName, limit: '10', mode: 'text' });
     const res = await fetch(`${SEARCH_URL}?${params.toString()}`);
     if (res.ok) {
-      const data = (await res.json()) as { results?: SkillRef[] };
+      const raw = (await res.json()) as Record<string, unknown>;
+      const data = (raw.data || raw) as { results?: SkillRef[] };
       results = data.results ?? [];
     }
   } catch {
