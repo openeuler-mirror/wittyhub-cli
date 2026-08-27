@@ -11,7 +11,7 @@ Supports **OpenCode**, **Claude Code**, **Codex**, **Cursor**, and [68 more](#su
 ## Install a Skill
 
 ```bash
-npx wittyhub add vercel-labs/agent-skills
+npx wittyhub install https://gitcode.com/openeuler/witty-diagnosis-agent --skill system-resource-diagnosis
 ```
 
 ## Use a Skill Without Installing

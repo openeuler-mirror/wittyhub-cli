@@ -179,12 +179,9 @@ ${BOLD}Options:${RESET}
   --version, -v     Show version number
 
 ${BOLD}Examples:${RESET}
-  ${DIM}$${RESET} wittyhub add vercel-labs/agent-skills
-  ${DIM}$${RESET} wittyhub use vercel-labs/agent-skills@vercel-optimize | claude
-  ${DIM}$${RESET} wittyhub use vercel-labs/agent-skills --skill vercel-optimize --agent claude-code
-  ${DIM}$${RESET} wittyhub add vercel-labs/agent-skills -g
-  ${DIM}$${RESET} wittyhub add vercel-labs/agent-skills --agent claude-code cursor
-  ${DIM}$${RESET} wittyhub add vercel-labs/agent-skills --skill pr-review commit
+  ${DIM}$${RESET} wittyhub add https://gitcode.com/openeuler/witty-diagnosis-agent --skill system-resource-diagnosis
+  ${DIM}$${RESET} wittyhub add https://gitcode.com/openeuler/witty-diagnosis-agent --skill system-resource-diagnosis -g
+  ${DIM}$${RESET} wittyhub add https://gitcode.com/openeuler/witty-diagnosis-agent --skill system-resource-diagnosis --agent claude-code cursor
   ${DIM}$${RESET} wittyhub remove                        ${DIM}# interactive remove${RESET}
   ${DIM}$${RESET} wittyhub remove web-design             ${DIM}# remove by name${RESET}
   ${DIM}$${RESET} wittyhub rm --global frontend-design
