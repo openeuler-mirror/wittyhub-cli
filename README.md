@@ -113,6 +113,7 @@ When installing interactively, you can choose:
 | `npx wittyhub remove [skills]` | Remove installed skills from agents           |
 | `npx wittyhub update [skills]` | Update installed skills to latest versions    |
 | `npx wittyhub init [name]`     | Create a new SKILL.md template                |
+| `npx wittyhub validate <path>` | Validate a local skill for spec compliance    |
 
 ### `wittyhub list`
 

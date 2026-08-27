@@ -15,6 +15,7 @@ import { flushTelemetry } from './telemetry.ts';
 import { isRunningInAgent } from './detect-agent.ts';
 import { runUpdate } from './update.ts';
 import { runUse, parseUseOptions } from './use.ts';
+import { runValidate } from './validate.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -95,6 +96,9 @@ function showBanner(): void {
     `  ${DIM}$${RESET} ${TEXT}npx wittyhub init ${DIM}[name]${RESET}          ${DIM}Create a new skill${RESET}`
   );
   console.log(
+    `  ${DIM}$${RESET} ${TEXT}npx wittyhub validate ${DIM}<path>${RESET}   ${DIM}Validate a local skill${RESET}`
+  );
+  console.log(
     `  ${DIM}$${RESET} ${TEXT}npx wittyhub experimental_sync${RESET}    ${DIM}Sync skills from node_modules${RESET}`
   );
   console.log();
@@ -123,6 +127,8 @@ ${BOLD}Manage Skills:${RESET}
   get <source> --skill <skill>
                        View skill details (author/category/version/description/tags)
                        e.g. get https://github.com/huggingface/transformers --skill add-or-fix-type-checking
+  validate <path>     Validate a local skill for spec compliance (SKILL.md filename,
+                       frontmatter, required fields name/description, etc.)
 
 ${BOLD}Find Options:${RESET}
   --owner <owner>        Search only repositories from a GitHub owner
@@ -219,6 +225,28 @@ ${BOLD}Examples:${RESET}
   ${DIM}$${RESET} wittyhub init                    ${DIM}# creates my-skill/SKILL.md${RESET}
   ${DIM}$${RESET} wittyhub init my-skill           ${DIM}# creates my-skill/SKILL.md${RESET}
   ${DIM}$${RESET} wittyhub init code-reviewer      ${DIM}# creates code-reviewer/SKILL.md${RESET}
+`);
+}
+
+function showValidateHelp(): void {
+  console.log(`
+${BOLD}Usage:${RESET} wittyhub validate <path> [options]
+
+${BOLD}Description:${RESET}
+  Validate a local skill for spec compliance (SKILL.md filename, frontmatter,
+  required fields, etc.). Reports errors (must-fix) and warnings (recommended).
+
+${BOLD}Arguments:${RESET}
+  path               Path to the skill directory or SKILL.md file.
+
+${BOLD}Options:${RESET}
+  --json             Output result as JSON (no ANSI colors).
+  -h, --help         Show this help message.
+
+${BOLD}Examples:${RESET}
+  ${DIM}$${RESET} wittyhub validate ./my-skill
+  ${DIM}$${RESET} wittyhub validate ./my-skill/SKILL.md
+  ${DIM}$${RESET} wittyhub validate ./my-skill --json
 `);
 }
 
@@ -408,6 +436,18 @@ async function main(): Promise<void> {
     case 'get': {
       if (!inAgent) showLogo();
       await runGet(restArgs);
+      break;
+    }
+    case 'validate':
+    case 'check-skill': {
+      // Check for --help or -h flag
+      if (restArgs.includes('--help') || restArgs.includes('-h')) {
+        showValidateHelp();
+        break;
+      }
+      if (!inAgent) showLogo();
+      console.log();
+      await runValidate(restArgs);
       break;
     }
     case 'check':
