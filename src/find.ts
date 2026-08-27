@@ -130,6 +130,22 @@ export async function searchSkillsAPI(query: string, owner?: string): Promise<Se
   }
 
   let data: {
+    // API wraps responses in { code, msg, data }; keep both shapes for
+    // deployments without the wrapper.
+    code?: number;
+    msg?: string;
+    data?: {
+      results?: Array<{
+        skill_id: string;
+        name: string;
+        description: string | null;
+        source: string;
+        source_url: string;
+        download_count: number;
+        risk_score: number | null;
+      }>;
+      total?: number;
+    };
     results?: Array<{
       skill_id: string;
       name: string;
@@ -147,7 +163,8 @@ export async function searchSkillsAPI(query: string, owner?: string): Promise<Se
     return { skills: [], error: '搜索服务响应格式无效' };
   }
 
-  let skills = (data.results ?? []).map((skill) => ({
+  const rawResults = data.data?.results ?? data.results ?? [];
+  let skills = rawResults.map((skill) => ({
     name: sanitizeMetadata(skill.name),
     slug: sanitizeMetadata(skill.skill_id),
     source: sanitizeMetadata(skill.source || ''),
