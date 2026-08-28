@@ -103,29 +103,31 @@ export async function fetchSkillDetail(
       return { status: 'error', message: String(data.error) };
     }
 
+    const skillData = (data.data || data) as Record<string, unknown>;
+
     return {
       status: 'ok',
       data: {
-        skill_id: (data.skill_id as string) ?? skillId,
-        name: (data.name as string) ?? '',
-        description: (data.description as string | null) ?? null,
-        version: (data.version as string | null) ?? null,
-        commit_id: (data.commit_id as string | null) ?? null,
-        author: (data.author as string | null) ?? null,
-        source: (data.source as string) ?? '',
-        source_url: (data.source_url as string) ?? '',
-        repo_url: (data.repo_url as string | null) ?? null,
-        category: (data.category as string | null) ?? null,
-        tags: Array.isArray(data.tags) ? (data.tags as string[]) : null,
-        platform: (data.platform as string | null) ?? null,
-        metadata: (data.metadata as Record<string, unknown>) ?? null,
-        risk_score: (data.risk_score as number | null) ?? null,
-        download_count: (data.download_count as number) ?? 0,
-        period_downloads: (data.period_downloads as number | null) ?? null,
-        rating: (data.rating as string | null) ?? null,
-        created_at: (data.created_at as string | null) ?? null,
-        updated_at: (data.updated_at as string | null) ?? null,
-        last_indexed_at: (data.last_indexed_at as string | null) ?? null,
+        skill_id: (skillData.skill_id as string) ?? skillId,
+        name: (skillData.name as string) ?? '',
+        description: (skillData.description as string | null) ?? null,
+        version: (skillData.version as string | null) ?? null,
+        commit_id: (skillData.commit_id as string | null) ?? null,
+        author: (skillData.author as string | null) ?? null,
+        source: (skillData.source as string) ?? '',
+        source_url: (skillData.source_url as string) ?? '',
+        repo_url: (skillData.repo_url as string | null) ?? null,
+        category: (skillData.category as string | null) ?? null,
+        tags: Array.isArray(skillData.tags) ? (skillData.tags as string[]) : null,
+        platform: (skillData.platform as string | null) ?? null,
+        metadata: (skillData.metadata as Record<string, unknown>) ?? null,
+        risk_score: (skillData.risk_score as number | null) ?? null,
+        download_count: (skillData.download_count as number) ?? 0,
+        period_downloads: (skillData.period_downloads as number | null) ?? null,
+        rating: (skillData.rating as string | null) ?? null,
+        created_at: (skillData.created_at as string | null) ?? null,
+        updated_at: (skillData.updated_at as string | null) ?? null,
+        last_indexed_at: (skillData.last_indexed_at as string | null) ?? null,
       },
     };
   } finally {

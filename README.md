@@ -6,12 +6,12 @@ The CLI for the open agent skills ecosystem.
 Supports **OpenCode**, **Claude Code**, **Codex**, **Cursor**, and [68 more](#supported-agents).
 <!-- agent-list:end -->
 
-[![skills.sh](https://skills.sh/b/vercel-labs/skills)](https://skills.sh/vercel-labs/skills)
+[![SkillHub](https://skillhub.openeuler.org/)](https://skillhub.openeuler.org/)
 
 ## Install a Skill
 
 ```bash
-npx wittyhub add vercel-labs/agent-skills
+npx wittyhub install https://gitcode.com/openeuler/witty-diagnosis-agent --skill system-resource-diagnosis
 ```
 
 ## Use a Skill Without Installing
@@ -113,6 +113,7 @@ When installing interactively, you can choose:
 | `npx wittyhub remove [skills]` | Remove installed skills from agents           |
 | `npx wittyhub update [skills]` | Update installed skills to latest versions    |
 | `npx wittyhub init [name]`     | Create a new SKILL.md template                |
+| `npx wittyhub validate <path>` | Validate a local skill for spec compliance    |
 
 ### `wittyhub list`
 
@@ -233,7 +234,7 @@ Skills let agents perform specialized tasks like:
 - Creating PRs following your team's conventions
 - Integrating with external tools (Linear, Notion, etc.)
 
-Discover skills at **[skills.sh](https://skills.sh)**
+Discover skills at **[SkillHub](https://skillhub.openeuler.org/)**
 
 ## Supported Agents
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { writeFileSync, readFileSync, existsSync, mkdirSync } from 'fs';
-import { basename, join, dirname } from 'path';
+import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { runAdd, parseAddOptions, initTelemetry } from './add.ts';
 import { runAudit } from './audit.ts';
@@ -15,6 +15,7 @@ import { flushTelemetry } from './telemetry.ts';
 import { isRunningInAgent } from './detect-agent.ts';
 import { runUpdate } from './update.ts';
 import { runUse, parseUseOptions } from './use.ts';
+import { runValidate } from './validate.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -95,12 +96,15 @@ function showBanner(): void {
     `  ${DIM}$${RESET} ${TEXT}npx wittyhub init ${DIM}[name]${RESET}          ${DIM}Create a new skill${RESET}`
   );
   console.log(
+    `  ${DIM}$${RESET} ${TEXT}npx wittyhub validate ${DIM}<path>${RESET}   ${DIM}Validate a local skill${RESET}`
+  );
+  console.log(
     `  ${DIM}$${RESET} ${TEXT}npx wittyhub experimental_sync${RESET}    ${DIM}Sync skills from node_modules${RESET}`
   );
   console.log();
   console.log(`${DIM}try:${RESET} npx wittyhub add vercel-labs/agent-skills`);
   console.log();
-  console.log(`Discover more skills at ${TEXT}https://skills.sh/${RESET}`);
+  console.log(`Discover more skills at ${TEXT}https://skillhub.openeuler.org/${RESET}`);
   console.log();
 }
 
@@ -123,6 +127,8 @@ ${BOLD}Manage Skills:${RESET}
   get <source> --skill <skill>
                        View skill details (author/category/version/description/tags)
                        e.g. get https://github.com/huggingface/transformers --skill add-or-fix-type-checking
+  validate <path>     Validate a local skill for spec compliance (SKILL.md filename,
+                       frontmatter, required fields name/description, etc.)
 
 ${BOLD}Find Options:${RESET}
   --owner <owner>        Search only repositories from a GitHub owner
@@ -137,7 +143,7 @@ ${BOLD}Update Options:${RESET}
 
 ${BOLD}Project:${RESET}
   experimental_install Restore skills from skills-lock.json
-  init [name]          Initialize a skill (creates <name>/SKILL.md or ./SKILL.md)
+  init [name]          Initialize a skill (creates <name>/SKILL.md; defaults to my-skill/)
   experimental_sync    Sync skills from node_modules into agent directories
 
 ${BOLD}Add Options:${RESET}
@@ -179,12 +185,9 @@ ${BOLD}Options:${RESET}
   --version, -v     Show version number
 
 ${BOLD}Examples:${RESET}
-  ${DIM}$${RESET} wittyhub add vercel-labs/agent-skills
-  ${DIM}$${RESET} wittyhub use vercel-labs/agent-skills@vercel-optimize | claude
-  ${DIM}$${RESET} wittyhub use vercel-labs/agent-skills --skill vercel-optimize --agent claude-code
-  ${DIM}$${RESET} wittyhub add vercel-labs/agent-skills -g
-  ${DIM}$${RESET} wittyhub add vercel-labs/agent-skills --agent claude-code cursor
-  ${DIM}$${RESET} wittyhub add vercel-labs/agent-skills --skill pr-review commit
+  ${DIM}$${RESET} wittyhub add https://gitcode.com/openeuler/witty-diagnosis-agent --skill system-resource-diagnosis
+  ${DIM}$${RESET} wittyhub add https://gitcode.com/openeuler/witty-diagnosis-agent --skill system-resource-diagnosis -g
+  ${DIM}$${RESET} wittyhub add https://gitcode.com/openeuler/witty-diagnosis-agent --skill system-resource-diagnosis --agent claude-code cursor
   ${DIM}$${RESET} wittyhub remove                        ${DIM}# interactive remove${RESET}
   ${DIM}$${RESET} wittyhub remove web-design             ${DIM}# remove by name${RESET}
   ${DIM}$${RESET} wittyhub rm --global frontend-design
@@ -203,7 +206,47 @@ ${BOLD}Examples:${RESET}
   ${DIM}$${RESET} wittyhub experimental_sync              ${DIM}# sync from node_modules${RESET}
   ${DIM}$${RESET} wittyhub experimental_sync -y           ${DIM}# sync without prompts${RESET}
 
-Discover more skills at ${TEXT}https://skills.sh/${RESET}
+Discover more skills at ${TEXT}https://skillhub.openeuler.org/${RESET}
+`);
+}
+
+function showInitHelp(): void {
+  console.log(`
+${BOLD}Usage:${RESET} wittyhub init [name]
+
+${BOLD}Description:${RESET}
+  Initialize a new skill by creating a SKILL.md template.
+
+${BOLD}Arguments:${RESET}
+  name              Optional skill name. Creates <name>/SKILL.md.
+                    If omitted, defaults to my-skill/ (never the cwd itself).
+
+${BOLD}Examples:${RESET}
+  ${DIM}$${RESET} wittyhub init                    ${DIM}# creates my-skill/SKILL.md${RESET}
+  ${DIM}$${RESET} wittyhub init my-skill           ${DIM}# creates my-skill/SKILL.md${RESET}
+  ${DIM}$${RESET} wittyhub init code-reviewer      ${DIM}# creates code-reviewer/SKILL.md${RESET}
+`);
+}
+
+function showValidateHelp(): void {
+  console.log(`
+${BOLD}Usage:${RESET} wittyhub validate <path> [options]
+
+${BOLD}Description:${RESET}
+  Validate a local skill for spec compliance (SKILL.md filename, frontmatter,
+  required fields, etc.). Reports errors (must-fix) and warnings (recommended).
+
+${BOLD}Arguments:${RESET}
+  path               Path to the skill directory or SKILL.md file.
+
+${BOLD}Options:${RESET}
+  --json             Output result as JSON (no ANSI colors).
+  -h, --help         Show this help message.
+
+${BOLD}Examples:${RESET}
+  ${DIM}$${RESET} wittyhub validate ./my-skill
+  ${DIM}$${RESET} wittyhub validate ./my-skill/SKILL.md
+  ${DIM}$${RESET} wittyhub validate ./my-skill --json
 `);
 }
 
@@ -234,31 +277,32 @@ ${BOLD}Examples:${RESET}
   ${DIM}$${RESET} wittyhub remove --all                      ${DIM}# remove all skills${RESET}
   ${DIM}$${RESET} wittyhub remove --skill '*' -a cursor      ${DIM}# remove all skills from cursor${RESET}
 
-Discover more skills at ${TEXT}https://skills.sh/${RESET}
+Discover more skills at ${TEXT}https://skillhub.openeuler.org/${RESET}
 `);
 }
 
 function runInit(args: string[]): void {
   const cwd = process.cwd();
-  const skillName = args[0] || basename(cwd);
-  const hasName = args[0] !== undefined;
+  // Default to "my-skill" so `wittyhub init` always creates a dedicated
+  // subdirectory instead of dropping SKILL.md into the current directory.
+  const skillName = args[0] ?? 'my-skill';
 
-  const skillDir = hasName ? join(cwd, skillName) : cwd;
+  const skillDir = join(cwd, skillName);
   const skillFile = join(skillDir, 'SKILL.md');
-  const displayPath = hasName ? `${skillName}/SKILL.md` : 'SKILL.md';
+  const displayPath = `${skillName}/SKILL.md`;
 
   if (existsSync(skillFile)) {
     console.log(`${TEXT}Skill already exists at ${DIM}${displayPath}${RESET}`);
     return;
   }
 
-  if (hasName) {
-    mkdirSync(skillDir, { recursive: true });
-  }
+  mkdirSync(skillDir, { recursive: true });
 
   const skillContent = `---
 name: ${skillName}
 description: A brief description of what this skill does
+version: 0.1.0  # optional; increment as needed
+category: others  # optional;change if needed — full list at https://gitcode.com/openeuler/openEuler-skills
 ---
 
 # ${skillName}
@@ -288,16 +332,18 @@ Describe when this skill should be used.
   console.log(
     `  2. Update the ${TEXT}name${RESET} and ${TEXT}description${RESET} in the frontmatter`
   );
+  console.log(
+    `  3. Optionally set ${TEXT}version${RESET} and ${TEXT}category${RESET} (see the comment in ${TEXT}${displayPath}${RESET} for the full list of categories)`
+  );
   console.log();
   console.log(`${DIM}Publishing:${RESET}`);
   console.log(
-    `  ${DIM}GitHub:${RESET}  Push to a repo, then ${TEXT}npx wittyhub add <owner>/<repo>${RESET}`
-  );
-  console.log(
-    `  ${DIM}URL:${RESET}     Host the file, then ${TEXT}npx wittyhub add https://example.com/${displayPath}${RESET}`
+    `  Submit your skill to ${TEXT}https://gitcode.com/openeuler/openEuler-skills${RESET}`
   );
   console.log();
-  console.log(`Browse existing skills for inspiration at ${TEXT}https://skills.sh/${RESET}`);
+  console.log(
+    `Browse existing skills for inspiration at ${TEXT}https://skillhub.openeuler.org/${RESET}`
+  );
   console.log();
 }
 
@@ -329,6 +375,11 @@ async function main(): Promise<void> {
       await runFind(restArgs);
       break;
     case 'init':
+      // Check for --help or -h flag
+      if (restArgs.includes('--help') || restArgs.includes('-h')) {
+        showInitHelp();
+        break;
+      }
       if (!inAgent) showLogo();
       console.log();
       runInit(restArgs);
@@ -385,6 +436,18 @@ async function main(): Promise<void> {
     case 'get': {
       if (!inAgent) showLogo();
       await runGet(restArgs);
+      break;
+    }
+    case 'validate':
+    case 'check-skill': {
+      // Check for --help or -h flag
+      if (restArgs.includes('--help') || restArgs.includes('-h')) {
+        showValidateHelp();
+        break;
+      }
+      if (!inAgent) showLogo();
+      console.log();
+      await runValidate(restArgs);
       break;
     }
     case 'check':
