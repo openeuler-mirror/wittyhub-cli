@@ -1,41 +1,33 @@
 import pc from 'picocolors';
 import { GET_URL } from './config.ts';
 import { track } from './telemetry.ts';
-import { resolveSkillId } from './skill-resolver.ts';
+import { normalizeSkillId } from './skill-resolver.ts';
 
 // ─── Get command ───
 // 查看某个技能的详细信息（作者/分类/版本/描述/标签等）。
-// 用法与安装命令一致：
-//   wittyhub get <source> --skill <skill>
-//   wittyhub get https://github.com/huggingface/transformers --skill add-or-fix-type-checking
-// 兼容旧用法（直接传 skill_id）：
-//   wittyhub get github/huggingface/transformers/.ai/skills/add-or-fix-type-checking
+//   wittyhub get <skill_id>
+//   wittyhub get github:vercel-labs/agent-skills/deploy-to-vercel
 
 export interface ParseGetOptionsResult {
-  source: string;
-  skill: string;
+  skillId: string;
   errors: string[];
 }
 
 export function parseGetOptions(args: string[]): ParseGetOptionsResult {
-  let source = '';
-  let skill = '';
   const errors: string[] = [];
+  let skillId = '';
 
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    if (arg === '-s' || arg === '--skill') {
-      i++;
-      skill = args[i]?.trim() ?? '';
-    } else if (arg && !arg.startsWith('-')) {
-      source = arg.trim();
+  for (const arg of args) {
+    if (arg && !arg.startsWith('-')) {
+      skillId = arg.trim();
+      break;
     }
   }
 
-  if (!source) {
-    errors.push('Missing source or skill id');
+  if (!skillId) {
+    errors.push('Missing skill id');
   }
-  return { source, skill, errors };
+  return { skillId: normalizeSkillId(skillId), errors };
 }
 
 export interface SkillDetail {
@@ -75,7 +67,7 @@ export async function fetchSkillDetail(
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const url = GET_URL.replace('{skill_id}', skillId.split('/').map(encodeURIComponent).join('/'));
+    const url = GET_URL.replace('{skill_id}', skillId);
 
     let response: Response;
     try {
@@ -183,24 +175,11 @@ export function buildGetOutput(data: SkillDetail): string[] {
 }
 
 export async function runGet(args: string[]): Promise<void> {
-  const { source, skill, errors } = parseGetOptions(args);
+  const { skillId, errors } = parseGetOptions(args);
   if (errors.length > 0) {
     for (const error of errors) console.error(pc.red(error));
-    console.error('Usage: wittyhub get <source> --skill <skill>');
-    console.error('       wittyhub get <skill_id>');
+    console.error('Usage: wittyhub get <skill_id>');
     return;
-  }
-
-  // 新格式：<source> + --skill <skill>；优先通过列表接口按仓库精确匹配真实 skill_id，
-  // 失败时回退推导逻辑。兼容旧格式：无 --skill 时把第一个位置参数当作 skill_id。
-  const { skillId, derived } = await resolveSkillId(source, skill || undefined);
-  if (!skillId) {
-    console.error(pc.red(`Unable to resolve skill id from source: ${source}`));
-    console.error('Usage: wittyhub get <source> --skill <skill>');
-    return;
-  }
-  if (derived) {
-    console.error(pc.yellow(`Could not locate skill in repo; trying derived id: ${skillId}`));
   }
 
   const result = await fetchSkillDetail(skillId);
