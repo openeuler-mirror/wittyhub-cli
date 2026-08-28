@@ -53,7 +53,7 @@ describe('searchSkillsAPI', () => {
       json: async () => ({
         results: [
           {
-            skill_id: 'gitcode/vercel/agent-skills/.skills/deploy-to-vercel',
+            skill_id: 'gitcode:vercel/agent-skills/deploy-to-vercel',
             name: 'deploy-to-vercel',
             description: 'Deploy to Vercel',
             source: 'gitcode',
@@ -62,7 +62,7 @@ describe('searchSkillsAPI', () => {
             risk_score: 85,
           },
           {
-            skill_id: 'gitcode/other/repo/some-skill',
+            skill_id: 'gitcode:other/repo/some-skill',
             name: 'some-skill',
             description: 'Another skill',
             source: 'gitcode',
@@ -81,7 +81,7 @@ describe('searchSkillsAPI', () => {
     expect(skills).toHaveLength(2);
     expect(skills[0]).toMatchObject({
       name: 'deploy-to-vercel',
-      slug: 'gitcode/vercel/agent-skills/.skills/deploy-to-vercel',
+      slug: 'gitcode:vercel/agent-skills/deploy-to-vercel',
       source: 'gitcode',
       installs: 1234,
       description: 'Deploy to Vercel',
@@ -98,7 +98,7 @@ describe('searchSkillsAPI', () => {
       json: async () => ({
         results: [
           {
-            skill_id: 'gitcode/vercel/repo/skills/a',
+            skill_id: 'gitcode:vercel/repo/skills/a',
             name: 'a',
             description: 'a',
             source: 'gitcode',
@@ -107,7 +107,7 @@ describe('searchSkillsAPI', () => {
             risk_score: 10,
           },
           {
-            skill_id: 'gitcode/other/repo/skills/b',
+            skill_id: 'gitcode:other/repo/skills/b',
             name: 'b',
             description: 'b',
             source: 'gitcode',
