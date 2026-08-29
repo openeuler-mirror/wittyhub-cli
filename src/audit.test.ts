@@ -6,41 +6,17 @@ afterEach(() => {
 });
 
 describe('parseAuditOptions', () => {
-  it('extracts the source and --skill', () => {
-    expect(
-      parseAuditOptions([
-        'https://github.com/huggingface/transformers',
-        '--skill',
-        'add-or-fix-type-checking',
-      ])
-    ).toEqual({
-      source: 'https://github.com/huggingface/transformers',
-      skill: 'add-or-fix-type-checking',
+  it('parses skill_id as the first positional arg', () => {
+    expect(parseAuditOptions(['github:owner/repo/skill'])).toEqual({
+      skillId: 'github:owner/repo/skill',
       errors: [],
     });
   });
 
-  it('accepts the -s short flag for skill', () => {
-    expect(parseAuditOptions(['vercel-labs/agent-skills', '-s', 'deploy'])).toEqual({
-      source: 'vercel-labs/agent-skills',
-      skill: 'deploy',
-      errors: [],
-    });
-  });
-
-  it('keeps the first positional arg as source when no --skill is given', () => {
-    expect(parseAuditOptions(['github/a/b/skills/deploy'])).toEqual({
-      source: 'github/a/b/skills/deploy',
-      skill: '',
-      errors: [],
-    });
-  });
-
-  it('errors when no source is provided', () => {
+  it('errors when no skill_id is provided', () => {
     expect(parseAuditOptions([])).toEqual({
-      source: '',
-      skill: '',
-      errors: ['Missing source or skill id'],
+      skillId: 'github:',
+      errors: ['Missing skill id'],
     });
   });
 });
@@ -61,11 +37,11 @@ describe('fetchSkillAudit', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const result = await fetchSkillAudit('github/vercel-labs/agent-skills/skills/deploy-to-vercel');
+    const result = await fetchSkillAudit('github:vercel-labs/agent-skills/deploy-to-vercel');
 
     const url = new URL(fetchMock.mock.calls[0]![0] as string);
     expect(url.pathname).toBe(
-      '/api/v1/skills/github/vercel-labs/agent-skills/skills/deploy-to-vercel/audit'
+      '/api/v1/skills/github:vercel-labs/agent-skills/deploy-to-vercel/audit'
     );
 
     expect(result.status).toBe('ok');
@@ -86,7 +62,7 @@ describe('fetchSkillAudit', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const result = await fetchSkillAudit('github/a/b/skills/x');
+    const result = await fetchSkillAudit('github:owner/repo/skill');
     expect(result).toEqual({ status: 'no_audit', message: 'No audit found' });
   });
 
@@ -94,13 +70,13 @@ describe('fetchSkillAudit', () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 404 });
     vi.stubGlobal('fetch', fetchMock);
 
-    const result = await fetchSkillAudit('github/a/b/skills/x');
+    const result = await fetchSkillAudit('github:owner/repo/skill');
     expect(result).toEqual({ status: 'not_found' });
   });
 
   it('returns an error when the fetch itself fails', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ECONNREFUSED')));
-    const result = await fetchSkillAudit('github/a/b/skills/x');
+    const result = await fetchSkillAudit('github:owner/repo/skill');
     expect(result.status).toBe('error');
     if (result.status === 'error') {
       expect(result.message).toContain('无法连接审计服务');
@@ -110,7 +86,7 @@ describe('fetchSkillAudit', () => {
 
 describe('buildAuditOutput', () => {
   it('renders risk level and risk signals', () => {
-    const lines = buildAuditOutput('github/a/b/skills/x', {
+    const lines = buildAuditOutput('github:owner/repo/skill', {
       risk_level: 'high',
       risk_score: 85,
       risk_signals: [{ id: 's1', name: 'eval usage', description: 'Uses eval', severity: 'high' }],
@@ -118,7 +94,7 @@ describe('buildAuditOutput', () => {
     });
 
     expect(lines.join('\n')).toContain('Skill:');
-    expect(lines.join('\n')).toContain('github/a/b/skills/x');
+    expect(lines.join('\n')).toContain('github:owner/repo/skill');
     expect(lines.join('\n')).toContain('High');
     expect(lines.join('\n')).toContain('85');
     expect(lines.join('\n')).toContain('Risk signals:');
@@ -127,7 +103,7 @@ describe('buildAuditOutput', () => {
   });
 
   it('colors the score with the same color as the risk level', () => {
-    const lines = buildAuditOutput('github/a/b/skills/x', {
+    const lines = buildAuditOutput('github:owner/repo/skill', {
       risk_level: 'high',
       risk_score: 85,
       risk_signals: [],
@@ -140,7 +116,7 @@ describe('buildAuditOutput', () => {
   });
 
   it('renders a no-signals message when the list is empty', () => {
-    const lines = buildAuditOutput('github/a/b/skills/x', {
+    const lines = buildAuditOutput('github:owner/repo/skill', {
       risk_level: 'safe',
       risk_score: 0,
       risk_signals: [],
