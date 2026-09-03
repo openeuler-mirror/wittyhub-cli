@@ -21,6 +21,9 @@ npx wittyhub add gitcode:openeuler/witty-diagnosis-agent
 
 # Or by repo URL + --skill (for exploring repos)
 npx wittyhub add https://gitcode.com/openeuler/witty-diagnosis-agent --skill system-resource-diagnosis
+
+# Install a specific version
+npx wittyhub add gitcode:openeuler/witty-diagnosis-agent --skill system-resource-diagnosis --version v1.0.0
 ```
 
 > **Tip:** `skill_id` format is `{source}:{owner}/{repo}/{skill_name}`. Omitting the `{source}:` prefix defaults to `github:`.
