@@ -121,12 +121,8 @@ ${BOLD}Manage Skills:${RESET}
   remove [skills]      Remove installed skills
   list, ls             List installed skills
   find [query]         Search for skills interactively
-  audit <source> --skill <skill>
-                       Show security audit result (risk level + risk signals)
-                       e.g. audit https://github.com/huggingface/transformers --skill add-or-fix-type-checking
-  get <source> --skill <skill>
-                       View skill details (author/category/version/description/tags)
-                       e.g. get https://github.com/huggingface/transformers --skill add-or-fix-type-checking
+  audit <skill_id>       Show security audit result (risk level + risk signals)
+  get <skill_id>         View skill details (author/category/version/description/tags)
   validate <path>     Validate a local skill for spec compliance (SKILL.md filename,
                        frontmatter, required fields name/description, etc.)
 
