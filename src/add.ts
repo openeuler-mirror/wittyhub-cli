@@ -274,7 +274,14 @@ async function downloadAndExtractSkill(skillId: string, targetDir?: string): Pro
 
   const response = await fetch(downloadUrl);
   if (!response.ok) {
-    throw new Error(`HTTP ${response.status} ${response.statusText}`);
+    // 透出后端错误 detail（如 409 时说明仓库本地克隆缺失等具体原因）
+    const detail = await response
+      .json()
+      .then((data: { detail?: unknown }) =>
+        typeof data?.detail === 'string' && data.detail ? `: ${data.detail}` : ''
+      )
+      .catch(() => '');
+    throw new Error(`HTTP ${response.status} ${response.statusText}${detail}`);
   }
 
   const tempDir = targetDir ?? (await mkdtemp(join(tmpdir(), 'skills-')));

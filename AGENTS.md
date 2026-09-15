@@ -11,17 +11,17 @@ This file provides guidance to AI coding agents working on the `wittyhub` CLI co
 | Command                       | Description                                         |
 | ----------------------------- | --------------------------------------------------- |
 | `wittyhub`                    | Show banner with available commands                 |
-| `wittyhub add <pkg>`          | Install skills from git repos, URLs, or local paths |
+| `wittyhub add <pkg>`          | Install skills from git repos, URLs, or local paths (aliases: `a`, `i`, `install`) |
 | `wittyhub use <pkg>@<skill>`  | Use one skill without installing                    |
 | `wittyhub experimental_install` | Restore skills from skills-lock.json             |
 | `wittyhub experimental_sync`  | Sync skills from node_modules into agent dirs       |
 | `wittyhub list`               | List installed skills (alias: `ls`)                 |
 | `wittyhub update [skills...]` | Update skills to latest versions                    |
-| `wittyhub audit <source> --skill <skill>` | Show security audit result (risk level + risk signals) |
-| `wittyhub get <source> --skill <skill>` | View skill details (author/category/version/description/tags) |
+| `wittyhub audit <skill_id>` | Show security audit result (risk level + risk signals) |
+| `wittyhub get <skill_id>` | View skill details (author/category/version/description/tags) |
 | `wittyhub init [name]`        | Create a new SKILL.md template                      |
 
-Aliases: `wittyhub a` works for `add`. `wittyhub i`, `wittyhub install` (no args) restore from `skills-lock.json`. `wittyhub ls` works for `list`. `wittyhub experimental_install` restores from `skills-lock.json`. `wittyhub experimental_sync` crawls `node_modules` for skills.
+Aliases: `wittyhub a`, `wittyhub i`, and `wittyhub install` all work as aliases for `add` (install skills from a repo/URL/skill_id). `wittyhub ls` works for `list`. `wittyhub experimental_install` restores skills from `skills-lock.json` — the only command that does; `wittyhub install` without arguments does NOT restore the lock (it errors with "Missing required argument: source"). `wittyhub experimental_sync` crawls `node_modules` for skills.
 
 ## Architecture
 

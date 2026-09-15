@@ -66,7 +66,7 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 
 ================================================================================
-Package: simple-git@3.30.0
+Package: simple-git@3.36.0
 License: MIT
 Repository: https://github.com/steveukx/git-js
 --------------------------------------------------------------------------------
@@ -139,7 +139,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 
 ================================================================================
-Package: yaml@2.8.3
+Package: yaml@2.9.0
 License: ISC
 Repository: https://github.com/eemeli/yaml
 --------------------------------------------------------------------------------
