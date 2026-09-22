@@ -14,6 +14,40 @@ import {
   getEveSubagentSkillsDir,
   sanitizeName,
 } from './installer.ts';
+import { parseSource } from './source-parser.ts';
+
+/**
+ * Extract the skill name from a source string.
+ * Supports source path formats like:
+ *   github:owner/repo/skill-name  → skill-name
+ *   owner/repo/skill-name         → skill-name
+ *   https://github.com/owner/repo/tree/branch/path/to/skill → skill
+ *   aip-user-stories              → aip-user-stories (passthrough)
+ */
+function extractSkillName(input: string): string {
+  try {
+    const parsed = parseSource(input);
+    if (parsed.subpath) {
+      const segments = parsed.subpath.split('/');
+      const last = segments[segments.length - 1];
+      if (last) return last;
+    }
+    // No subpath — try repo name from URL
+    if (parsed.type !== 'local' && parsed.url) {
+      const match = parsed.url.match(/\/([^/]+)\.git$/);
+      if (match?.[1]) return match[1];
+    }
+  } catch {
+    // Fall through to simple extraction
+  }
+  // Fallback: last segment after /
+  if (input.includes('/')) {
+    const segments = input.replace(/\.git$/, '').split('/');
+    const last = segments[segments.length - 1];
+    if (last) return last;
+  }
+  return input;
+}
 
 export interface RemoveOptions {
   global?: boolean;
@@ -101,7 +135,13 @@ export async function removeCommand(skillNames: string[], options: RemoveOptions
     selectedSkills = installedSkills;
   } else if (skillNames.length > 0) {
     selectedSkills = installedSkills.filter((s) =>
-      skillNames.some((name) => name.toLowerCase() === s.toLowerCase())
+      skillNames.some((name) => {
+        // 1. 精确名称匹配
+        if (name.toLowerCase() === s.toLowerCase()) return true;
+        // 2. 从 source 路径提取 skill name 后匹配
+        const extracted = extractSkillName(name);
+        return extracted.toLowerCase() === s.toLowerCase();
+      })
     );
 
     if (selectedSkills.length === 0) {

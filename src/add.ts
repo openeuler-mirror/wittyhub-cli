@@ -269,8 +269,15 @@ async function resolveSkillId(
  * Returns the temp directory path containing the extracted skill files.
  * Throws on download or extraction failure so the caller can surface an error.
  */
-async function downloadAndExtractSkill(skillId: string, targetDir?: string): Promise<string> {
-  const downloadUrl = DOWNLOAD_URL.replace('{skill_id}', skillId);
+async function downloadAndExtractSkill(
+  skillId: string,
+  targetDir?: string,
+  version?: string
+): Promise<string> {
+  let downloadUrl = DOWNLOAD_URL.replace('{skill_id}', skillId);
+  if (version) {
+    downloadUrl += `?version=${encodeURIComponent(version)}`;
+  }
 
   const response = await fetch(downloadUrl);
   if (!response.ok) {
@@ -844,6 +851,8 @@ export interface AddOptions {
    * selects the root agent. Implies installing for Eve.
    */
   subagent?: string[];
+  /** 指定下载的 Skill 版本（对应 skill_versions 表的 version 字段） */
+  version?: string;
 }
 
 /**
@@ -1778,7 +1787,7 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
     try {
       tempDir = await mkdtemp(join(tmpdir(), 'skills-'));
       for (const id of skillIds) {
-        await downloadAndExtractSkill(id, tempDir);
+        await downloadAndExtractSkill(id, tempDir, options.version);
       }
     } catch (e) {
       spinner.stop(pc.red('Download failed'));
@@ -2817,6 +2826,9 @@ export function parseAddOptions(args: string[]): { source: string[]; options: Ad
       i--; // Back up one since the loop will increment
     } else if (arg === '--dangerously-accept-openclaw-risks') {
       options.dangerouslyAcceptOpenclawRisks = true;
+    } else if (arg === '-v' || arg === '--version') {
+      i++;
+      options.version = args[i];
     } else if (arg && !arg.startsWith('-')) {
       source.push(arg);
     }
