@@ -23,7 +23,6 @@ export type AgentType =
   | 'deepagents'
   | 'devin'
   | 'dexto'
-  | 'doubao'
   | 'droid'
   | 'eve'
   | 'firebender'
@@ -53,7 +52,6 @@ export type AgentType =
   | 'pi'
   | 'qoder'
   | 'qoder-cn'
-  | 'qoderwork'
   | 'qwen-code'
   | 'replit'
   | 'reasonix'
@@ -65,7 +63,6 @@ export type AgentType =
   | 'trae'
   | 'trae-cn'
   | 'warp'
-  | 'workbuddy'
   | 'windsurf'
   | 'zed'
   | 'zencoder'
@@ -97,11 +94,6 @@ export interface AgentConfig {
   showInUniversalList?: boolean;
   /** Whether to display this universal agent in the interactive locked section. Defaults to true. */
   showInUniversalPrompt?: boolean;
-  /**
-   * Whether this agent only reads skills from its global (user-level) directory.
-   * When true, installs default to the global scope so the agent can see them.
-   */
-  requiresGlobal?: boolean;
 }
 
 export interface ParsedSource {

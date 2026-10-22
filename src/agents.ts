@@ -15,48 +15,6 @@ const autohandHome = process.env.AUTOHAND_HOME?.trim() || join(home, '.autohand'
 const zedAppDataHome = process.env.APPDATA?.trim();
 const zedFlatpakConfigHome = process.env.FLATPAK_XDG_CONFIG_HOME?.trim();
 
-/**
- * Doubao (豆包) keeps its agent workspace inside the desktop client's
- * Chromium profile. User-installed skills live in `.user_skills`, which the
- * client watches and syncs; `.skills` holds downloaded/system skills.
- *
- * Verified against official clients:
- * - macOS (Doubao 2.32.6):
- *   ~/Library/Application Support/Doubao/Default/.doubao/agent_mode/workspace/.user_skills
- * - Windows (Doubao 2.32.6, path whitelist in Doubao.dll):
- *   %LOCALAPPDATA%\Doubao\User Data\Default\.doubao\agent_mode\workspace\.user_skills
- *
- * DoubaoWork uses the same layout under its own data root. There is no
- * official Linux client, so the Linux fallback below is unverified and can be
- * overridden with DOUBAO_HOME.
- */
-function getDoubaoDataRoots(): string[] {
-  if (process.platform === 'darwin') {
-    return [
-      join(home, 'Library', 'Application Support', 'DoubaoWork'),
-      join(home, 'Library', 'Application Support', 'Doubao'),
-    ];
-  }
-  if (process.platform === 'win32') {
-    const localAppData = process.env.LOCALAPPDATA?.trim() || join(home, 'AppData', 'Local');
-    return [
-      join(localAppData, 'DoubaoWork', 'User Data'),
-      join(localAppData, 'Doubao', 'User Data'),
-    ];
-  }
-  return [join(configHome, 'DoubaoWork'), join(configHome, 'Doubao')];
-}
-
-const doubaoRoots = getDoubaoDataRoots();
-const doubaoHome =
-  process.env.DOUBAO_HOME?.trim() ||
-  doubaoRoots.find((root) => existsSync(root)) ||
-  doubaoRoots[0]!;
-
-function getDoubaoWorkspaceDir(): string {
-  return join(doubaoHome, 'Default', '.doubao', 'agent_mode', 'workspace');
-}
-
 function packageJsonHasDependency(packageJsonPath: string, dependencyName: string): boolean {
   try {
     const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8')) as {
@@ -307,16 +265,6 @@ export const agents: Record<AgentType, AgentConfig> = {
     showInUniversalPrompt: false,
     detectInstalled: async () => {
       return existsSync(join(home, '.dexto'));
-    },
-  },
-  doubao: {
-    name: 'doubao',
-    displayName: 'Doubao',
-    skillsDir: '.doubao/agent_mode/workspace/.user_skills',
-    globalSkillsDir: join(getDoubaoWorkspaceDir(), '.user_skills'),
-    requiresGlobal: true,
-    detectInstalled: async () => {
-      return existsSync(doubaoHome);
     },
   },
   droid: {
@@ -576,16 +524,6 @@ export const agents: Record<AgentType, AgentConfig> = {
       return existsSync(join(home, '.qoder-cn'));
     },
   },
-  qoderwork: {
-    name: 'qoderwork',
-    displayName: 'QoderWork',
-    skillsDir: '.qoderwork/skills',
-    globalSkillsDir: join(home, '.qoderwork/skills'),
-    requiresGlobal: true,
-    detectInstalled: async () => {
-      return existsSync(join(home, '.qoderwork'));
-    },
-  },
   'qwen-code': {
     name: 'qwen-code',
     displayName: 'Qwen Code',
@@ -684,15 +622,6 @@ export const agents: Record<AgentType, AgentConfig> = {
     globalSkillsDir: join(home, '.agents/skills'),
     detectInstalled: async () => {
       return existsSync(join(home, '.warp'));
-    },
-  },
-  workbuddy: {
-    name: 'workbuddy',
-    displayName: 'WorkBuddy',
-    skillsDir: '.workbuddy/skills',
-    globalSkillsDir: join(home, '.workbuddy/skills'),
-    detectInstalled: async () => {
-      return existsSync(join(home, '.workbuddy'));
     },
   },
   windsurf: {
