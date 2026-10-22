@@ -49,7 +49,6 @@ import {
   installBlobSkillForAgent,
   isSkillInstalled,
   getCanonicalPath,
-  getInstallPath,
   installWellKnownSkillForAgent,
   type InstallMode,
 } from './installer.ts';
@@ -1121,23 +1120,10 @@ async function handleWellKnownSkills(
   for (const skill of selectedSkills) {
     if (summaryLines.length > 0) summaryLines.push('');
 
-    if (installMode === 'symlink') {
-      const canonicalPath = getCanonicalPath(skill.installName, { global: installGlobally });
-      const shortCanonical = shortenPath(canonicalPath, cwd);
-      summaryLines.push(`${pc.cyan(shortCanonical)}`);
-      summaryLines.push(...buildAgentSummaryLines(targetAgents, installMode));
-    } else {
-      // Copy mode writes into each agent's own directory. Showing the canonical
-      // `.agents/skills` path here would be misleading because it is never created.
-      for (const agent of targetAgents) {
-        const installPath = getInstallPath(skill.installName, agent, {
-          global: installGlobally,
-          cwd,
-        });
-        summaryLines.push(`${pc.cyan(shortenPath(installPath, cwd))}`);
-        summaryLines.push(`  ${pc.dim('copy →')} ${agents[agent].displayName}`);
-      }
-    }
+    const canonicalPath = getCanonicalPath(skill.installName, { global: installGlobally });
+    const shortCanonical = shortenPath(canonicalPath, cwd);
+    summaryLines.push(`${pc.cyan(shortCanonical)}`);
+    summaryLines.push(...buildAgentSummaryLines(targetAgents, installMode));
     if (skill.files.size > 1) {
       summaryLines.push(`  ${pc.dim('files:')} ${skill.files.size}`);
     }
@@ -1609,30 +1595,13 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
   const agentResult = await detectAgent();
   if (agentResult.isAgent) {
     options.yes = true;
-    // Install only into the agent the CLI is running inside. Never fan out to
-    // every detected agent.
+    // Auto-select the detected agent + universal agents (unless user explicitly specified agents)
     if (!options.agent || options.agent.length === 0) {
       const mappedAgent = getAgentType(agentResult.agent.name);
-      if (!mappedAgent) {
-        // Never fall back to installing for every agent: without a known
-        // mapping we cannot tell where the current agent reads skills from.
-        p.log.error(`Unsupported agent: ${agentResult.agent.name}`);
-        p.log.info(`Specify the target explicitly with --agent <name>.`);
-        p.log.info(`Valid agents: ${Object.keys(agents).join(', ')}`);
-        process.exit(1);
+      if (mappedAgent) {
+        options.agent = ensureUniversalAgents([mappedAgent]);
       }
-      options.agent = [mappedAgent];
     }
-  }
-
-  // Some agents only read skills from their user-level directory. Default to the
-  // global scope whenever a target requires it, including when the user picked
-  // the agent explicitly with --agent.
-  if (
-    options.global === undefined &&
-    options.agent?.some((a) => agents[a as AgentType]?.requiresGlobal)
-  ) {
-    options.global = true;
   }
 
   console.log();
@@ -2293,31 +2262,17 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
       for (const skill of skills) {
         if (summaryLines.length > 0) summaryLines.push('');
 
-        if (installMode === 'symlink') {
-          const canonicalPath =
-            installTargets.length === 1
-              ? getCanonicalPath(skill.name, {
-                  global: installGlobally,
-                  agent: installTargets[0]!.agent,
-                  eveSubagent: installTargets[0]!.subagent,
-                })
-              : getCanonicalPath(skill.name, { global: installGlobally });
-          const shortCanonical = shortenPath(canonicalPath, cwd);
-          summaryLines.push(`${pc.cyan(shortCanonical)}`);
-          summaryLines.push(...buildTargetSummaryLines(installTargets, installMode));
-        } else {
-          // Copy mode writes into each agent's own directory. Showing the canonical
-          // `.agents/skills` path here would be misleading because it is never created.
-          for (const target of installTargets) {
-            const installPath = getInstallPath(skill.name, target.agent, {
-              global: installGlobally,
-              cwd,
-              eveSubagent: target.subagent,
-            });
-            summaryLines.push(`${pc.cyan(shortenPath(installPath, cwd))}`);
-            summaryLines.push(`  ${pc.dim('copy →')} ${targetDisplayName(target)}`);
-          }
-        }
+        const canonicalPath =
+          installTargets.length === 1
+            ? getCanonicalPath(skill.name, {
+                global: installGlobally,
+                agent: installTargets[0]!.agent,
+                eveSubagent: installTargets[0]!.subagent,
+              })
+            : getCanonicalPath(skill.name, { global: installGlobally });
+        const shortCanonical = shortenPath(canonicalPath, cwd);
+        summaryLines.push(`${pc.cyan(shortCanonical)}`);
+        summaryLines.push(...buildTargetSummaryLines(installTargets, installMode));
 
         const skillOverwrites = overwriteStatus.get(skill.name);
         const overwriteAgents = installTargets
