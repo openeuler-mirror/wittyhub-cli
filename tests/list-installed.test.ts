@@ -128,7 +128,10 @@ ${skillData.description}
   it('attributes global canonical skills to universal agents with native global dirs', async () => {
     vi.spyOn(agentsModule, 'detectInstalledAgents').mockResolvedValue(['opencode']);
 
-    const skillDir = join(homedir(), '.agents', 'skills', 'opencode-global-attribution-test');
+    const skillDir = join(
+      agentsModule.agents.opencode.globalSkillsDir,
+      'opencode-global-attribution-test'
+    );
     await mkdir(skillDir, { recursive: true });
     await writeFile(
       join(skillDir, 'SKILL.md'),

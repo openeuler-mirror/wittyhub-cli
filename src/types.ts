@@ -23,6 +23,8 @@ export type AgentType =
   | 'deepagents'
   | 'devin'
   | 'dexto'
+  | 'doubao'
+  | 'doubao-work'
   | 'droid'
   | 'eve'
   | 'firebender'
@@ -52,6 +54,7 @@ export type AgentType =
   | 'pi'
   | 'qoder'
   | 'qoder-cn'
+  | 'qoderwork'
   | 'qwen-code'
   | 'replit'
   | 'reasonix'
@@ -63,6 +66,7 @@ export type AgentType =
   | 'trae'
   | 'trae-cn'
   | 'warp'
+  | 'workbuddy'
   | 'windsurf'
   | 'zed'
   | 'zencoder'
@@ -94,6 +98,11 @@ export interface AgentConfig {
   showInUniversalList?: boolean;
   /** Whether to display this universal agent in the interactive locked section. Defaults to true. */
   showInUniversalPrompt?: boolean;
+  /**
+   * Whether global installs should use globalSkillsDir instead of the canonical
+   * shared ~/.agents/skills directory, even though skillsDir is `.agents/skills`.
+   */
+  exclusiveGlobal?: boolean;
 }
 
 export interface ParsedSource {

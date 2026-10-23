@@ -3,6 +3,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
+import { format } from 'prettier';
 import { agents } from '../src/agents.ts';
 
 const ROOT = join(import.meta.dirname, '..');
@@ -96,13 +97,17 @@ function replaceSection(
   return content.replace(regex, `$1\n${replacement}\n$2`);
 }
 
-function main() {
+async function main() {
   let readme = readFileSync(README_PATH, 'utf-8');
 
   readme = replaceSection(readme, 'agent-list', generateAgentList());
   readme = replaceSection(readme, 'agent-names', generateAgentNames(), true);
   readme = replaceSection(readme, 'supported-agents', generateAvailableAgentsTable());
   readme = replaceSection(readme, 'skill-discovery', generateSkillDiscoveryPaths());
+
+  // Run Prettier so the generated table keeps the repo's Markdown formatting
+  // (column alignment) instead of being rewritten on every sync.
+  readme = await format(readme, { filepath: README_PATH });
 
   writeFileSync(README_PATH, readme);
   console.log('README.md updated');
@@ -113,4 +118,7 @@ function main() {
   console.log('package.json updated');
 }
 
-main();
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

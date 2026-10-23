@@ -1,6 +1,6 @@
 {
   "name": "wittyhub",
-  "version": "0.0.5",
+  "version": "0.0.8",
   "description": "The open agent skills ecosystem",
   "type": "module",
   "bin": {
@@ -60,6 +60,8 @@
     "deepagents",
     "devin",
     "dexto",
+    "doubao",
+    "doubao-work",
     "droid",
     "eve",
     "firebender",
@@ -88,6 +90,7 @@
     "pi",
     "qoder",
     "qoder-cn",
+    "qoderwork",
     "qwen-code",
     "replit",
     "reasonix",
@@ -99,6 +102,7 @@
     "trae",
     "trae-cn",
     "warp",
+    "workbuddy",
     "windsurf",
     "zed",
     "zencoder",
