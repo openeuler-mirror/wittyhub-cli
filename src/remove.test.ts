@@ -3,6 +3,7 @@ import { existsSync, rmSync, mkdirSync, writeFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { runCli, runCliWithInput } from './test-utils.js';
+import { deriveSkillNameFromSource } from './remove.ts';
 
 describe('remove command', { timeout: 30000 }, () => {
   let testDir: string;
@@ -165,6 +166,91 @@ This is a test skill.
       // Skills should NOT be removed since we cancelled
       expect(existsSync(join(skillsDir, 'skill-one'))).toBe(true);
       expect(existsSync(join(skillsDir, 'skill-two'))).toBe(true);
+    });
+  });
+
+  describe('source-style arguments', () => {
+    beforeEach(() => {
+      createTestSkill('pdf-tools', 'PDF helper');
+      createTestSkill('code-review', 'Code review helper');
+    });
+
+    it('should remove by owner/repo/skill-name', () => {
+      const result = runCli(['remove', 'acme/skills-repo/pdf-tools', '-y'], testDir);
+
+      expect(result.stdout).toContain('Successfully removed');
+      expect(existsSync(join(skillsDir, 'pdf-tools'))).toBe(false);
+      expect(existsSync(join(skillsDir, 'code-review'))).toBe(true);
+    });
+
+    it('should remove by github: prefix', () => {
+      const result = runCli(['remove', 'github:acme/skills-repo/pdf-tools', '-y'], testDir);
+
+      expect(result.stdout).toContain('Successfully removed');
+      expect(existsSync(join(skillsDir, 'pdf-tools'))).toBe(false);
+    });
+
+    it('should remove by full GitHub tree URL', () => {
+      const result = runCli(
+        ['remove', 'https://github.com/acme/skills-repo/tree/main/skills/pdf-tools', '-y'],
+        testDir
+      );
+
+      expect(result.stdout).toContain('Successfully removed');
+      expect(existsSync(join(skillsDir, 'pdf-tools'))).toBe(false);
+    });
+
+    it('should remove by owner/repo@skill-name', () => {
+      const result = runCli(['remove', 'acme/skills-repo@pdf-tools', '-y'], testDir);
+
+      expect(result.stdout).toContain('Successfully removed');
+      expect(existsSync(join(skillsDir, 'pdf-tools'))).toBe(false);
+    });
+
+    it('should still match exact names first', () => {
+      const result = runCli(['remove', 'pdf-tools', '-y'], testDir);
+
+      expect(result.stdout).toContain('Successfully removed');
+      expect(existsSync(join(skillsDir, 'pdf-tools'))).toBe(false);
+      expect(existsSync(join(skillsDir, 'code-review'))).toBe(true);
+    });
+
+    it('should warn about unresolved arguments but remove matched ones', () => {
+      const result = runCli(['remove', 'pdf-tools', 'unknown/repo/missing-skill', '-y'], testDir);
+
+      expect(result.stdout).toContain('Successfully removed');
+      expect(result.stdout).toContain('No matching skills found for: unknown/repo/missing-skill');
+      expect(existsSync(join(skillsDir, 'pdf-tools'))).toBe(false);
+      expect(existsSync(join(skillsDir, 'code-review'))).toBe(true);
+    });
+
+    describe('deriveSkillNameFromSource', () => {
+      it('should extract the skill name from supported forms', () => {
+        expect(deriveSkillNameFromSource('acme/skills-repo/pdf-tools')).toBe('pdf-tools');
+        expect(deriveSkillNameFromSource('github:acme/skills-repo/pdf-tools')).toBe('pdf-tools');
+        expect(deriveSkillNameFromSource('acme/skills-repo@pdf-tools')).toBe('pdf-tools');
+        expect(
+          deriveSkillNameFromSource('https://github.com/acme/skills-repo/tree/main/pdf-tools')
+        ).toBe('pdf-tools');
+        expect(
+          deriveSkillNameFromSource('https://gitlab.com/group/repo/-/tree/main/skills/pdf-tools')
+        ).toBe('pdf-tools');
+        expect(deriveSkillNameFromSource('git@github.com:acme/skills-repo.git//pdf-tools')).toBe(
+          'pdf-tools'
+        );
+      });
+
+      it('should fall back to the repo name when no skill path is given', () => {
+        expect(deriveSkillNameFromSource('acme/skills-repo')).toBe('skills-repo');
+        expect(deriveSkillNameFromSource('https://github.com/acme/skills-repo.git')).toBe(
+          'skills-repo'
+        );
+      });
+
+      it('should return null for plain skill names', () => {
+        expect(deriveSkillNameFromSource('pdf-tools')).toBeNull();
+        expect(deriveSkillNameFromSource('')).toBeNull();
+      });
     });
   });
 
