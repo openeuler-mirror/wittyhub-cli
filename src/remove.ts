@@ -56,6 +56,78 @@ export interface RemoveOptions {
   all?: boolean;
 }
 
+/**
+ * Derive a candidate skill name from a source-like argument, so users can pass
+ * the same reference they installed with instead of the installed folder name.
+ *
+ * Supported forms:
+ *   owner/repo/skill-name
+ *   owner/repo@skill-name
+ *   github:owner/repo/skill-name
+ *   https://github.com/owner/repo/tree/<branch>/path/to/skill
+ *   https://gitlab.com/group/repo/-/tree/<branch>/path/to/skill
+ *   git@github.com:owner/repo.git//path/to/skill
+ *
+ * Returns null when the input carries no source information (a plain skill
+ * name) or when no trailing path segment can be extracted.
+ */
+export function deriveSkillNameFromSource(input: string): string | null {
+  let value = input.trim();
+  if (!value) {
+    return null;
+  }
+
+  // Prefer an explicit @skill suffix (owner/repo@skill or a URL@skill).
+  const atSkillMatch = value.match(/@([^/\s]+)$/);
+  if (atSkillMatch && !value.startsWith('git@') && !value.startsWith('ssh://')) {
+    return normalizeCandidate(atSkillMatch[1]!);
+  }
+
+  // Drop source aliases and protocol prefixes so the rest parses uniformly.
+  value = value.replace(/^(?:github|gitlab|gitcode):/i, '');
+
+  // git@host:owner/repo.git//path/to/skill -> owner/repo.git//path/to/skill
+  const scpMatch = value.match(/^git@[^:]+:(.+)$/);
+  if (scpMatch) {
+    value = scpMatch[1]!;
+  } else if (/^ssh:\/\//i.test(value)) {
+    try {
+      value = new URL(value).pathname.replace(/^\//, '');
+    } catch {
+      return null;
+    }
+  } else if (/^https?:\/\//i.test(value)) {
+    try {
+      const url = new URL(value);
+      // /owner/repo/tree/<ref>/path/to/skill or /group/repo/-/tree/<ref>/path/to/skill
+      const treeMatch =
+        url.pathname.match(/\/-\/tree\/[^/]+\/(.+)$/) || url.pathname.match(/\/tree\/[^/]+\/(.+)$/);
+      value = treeMatch ? treeMatch[1]! : url.pathname.replace(/^\//, '');
+    } catch {
+      return null;
+    }
+  }
+
+  value = value
+    .replace(/\.git\b/g, '')
+    .replace(/\/+/g, '/')
+    .replace(/\/$/, '');
+
+  // Require owner/repo before treating the input as a source.
+  const segments = value.split('/').filter(Boolean);
+  if (segments.length < 2) {
+    return null;
+  }
+
+  // owner/repo only: the installed name may still match the repo name.
+  return normalizeCandidate(segments[segments.length - 1]!);
+}
+
+function normalizeCandidate(candidate: string): string | null {
+  const trimmed = candidate.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 export async function removeCommand(skillNames: string[], options: RemoveOptions) {
   // Auto-enable non-interactive mode when running inside an AI agent
   const agentResult = await detectAgent();
@@ -147,6 +219,10 @@ export async function removeCommand(skillNames: string[], options: RemoveOptions
     if (selectedSkills.length === 0) {
       p.log.error(`No matching skills found for: ${skillNames.join(', ')}`);
       return;
+    }
+
+    if (unresolved.length > 0) {
+      p.log.warn(`No matching skills found for: ${unresolved.join(', ')}`);
     }
   } else {
     const choices = installedSkills.map((s) => ({
