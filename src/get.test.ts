@@ -6,41 +6,24 @@ afterEach(() => {
 });
 
 describe('parseGetOptions', () => {
-  it('extracts the source and --skill', () => {
-    expect(
-      parseGetOptions([
-        'https://github.com/huggingface/transformers',
-        '--skill',
-        'add-or-fix-type-checking',
-      ])
-    ).toEqual({
-      source: 'https://github.com/huggingface/transformers',
-      skill: 'add-or-fix-type-checking',
+  it('parses skill_id as the first positional arg', () => {
+    expect(parseGetOptions(['github:a/b/skills/deploy'])).toEqual({
+      skillId: 'github:a/b/skills/deploy',
       errors: [],
     });
   });
 
-  it('accepts the -s short flag for skill', () => {
-    expect(parseGetOptions(['vercel-labs/agent-skills', '-s', 'deploy'])).toEqual({
-      source: 'vercel-labs/agent-skills',
-      skill: 'deploy',
+  it('prepends github: for shorthand without a source type prefix', () => {
+    expect(parseGetOptions(['vercel-labs/agent-skills/deploy'])).toEqual({
+      skillId: 'github:vercel-labs/agent-skills/deploy',
       errors: [],
     });
   });
 
-  it('keeps the first positional arg as source when no --skill is given', () => {
-    expect(parseGetOptions(['github/a/b/skills/deploy'])).toEqual({
-      source: 'github/a/b/skills/deploy',
-      skill: '',
-      errors: [],
-    });
-  });
-
-  it('errors when no source is provided', () => {
+  it('errors when no skill_id is provided', () => {
     expect(parseGetOptions([])).toEqual({
-      source: '',
-      skill: '',
-      errors: ['Missing source or skill id'],
+      skillId: 'github:',
+      errors: ['Missing skill id'],
     });
   });
 });
@@ -51,7 +34,7 @@ describe('fetchSkillDetail', () => {
       ok: true,
       status: 200,
       json: async () => ({
-        skill_id: 'github/vercel-labs/agent-skills/skills/deploy-to-vercel',
+        skill_id: 'github:vercel-labs/agent-skills/deploy-to-vercel',
         name: 'deploy-to-vercel',
         description: 'Deploy to Vercel from the CLI',
         author: 'vercel',
@@ -67,14 +50,10 @@ describe('fetchSkillDetail', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const result = await fetchSkillDetail(
-      'github/vercel-labs/agent-skills/skills/deploy-to-vercel'
-    );
+    const result = await fetchSkillDetail('github:vercel-labs/agent-skills/deploy-to-vercel');
 
     const url = new URL(fetchMock.mock.calls[0]![0] as string);
-    expect(url.pathname).toBe(
-      '/api/v1/skills/github/vercel-labs/agent-skills/skills/deploy-to-vercel'
-    );
+    expect(url.pathname).toBe('/api/v1/skills/github:vercel-labs/agent-skills/deploy-to-vercel');
 
     expect(result.status).toBe('ok');
     if (result.status === 'ok') {
@@ -96,7 +75,7 @@ describe('fetchSkillDetail', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const result = await fetchSkillDetail('github/a/b/skills/x');
+    const result = await fetchSkillDetail('github:a/b/skills/x');
     expect(result).toEqual({ status: 'error', message: 'Skill not found' });
   });
 
@@ -104,13 +83,13 @@ describe('fetchSkillDetail', () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 404 });
     vi.stubGlobal('fetch', fetchMock);
 
-    const result = await fetchSkillDetail('github/a/b/skills/x');
+    const result = await fetchSkillDetail('github:a/b/skills/x');
     expect(result).toEqual({ status: 'not_found' });
   });
 
   it('returns an error when the fetch itself fails', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ECONNREFUSED')));
-    const result = await fetchSkillDetail('github/a/b/skills/x');
+    const result = await fetchSkillDetail('github:a/b/skills/x');
     expect(result.status).toBe('error');
     if (result.status === 'error') {
       expect(result.message).toContain('无法连接详情服务');
@@ -120,7 +99,7 @@ describe('fetchSkillDetail', () => {
 
 describe('buildGetOutput', () => {
   const detail = {
-    skill_id: 'github/vercel-labs/agent-skills/skills/deploy-to-vercel',
+    skill_id: 'github:vercel-labs/agent-skills/deploy-to-vercel',
     name: 'deploy-to-vercel',
     description: 'Deploy to Vercel from the CLI',
     version: '1.0.0',

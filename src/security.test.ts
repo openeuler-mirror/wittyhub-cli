@@ -41,7 +41,7 @@ describe('fetchAuditData', () => {
     });
 
     const [url] = vi.mocked(fetch).mock.calls[0] as [string];
-    expect(url).toContain('/api/v1/skills/github/a/b/skills/deploy-to-vercel/audit');
+    expect(url).toContain('/api/v1/skills/github:a/b/skills/deploy-to-vercel/audit');
   });
 
   it('returns null when response is not ok', async () => {

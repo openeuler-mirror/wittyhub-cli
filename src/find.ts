@@ -2,7 +2,6 @@ import * as readline from 'readline';
 import { runAdd, parseAddOptions } from './add.ts';
 import { sanitizeMetadata } from './sanitize.ts';
 import { track } from './telemetry.ts';
-import { isRepoPrivate } from './source-parser.ts';
 import { isRunningInAgent } from './detect-agent.ts';
 import { SEARCH_URL } from './config.ts';
 
@@ -17,20 +16,25 @@ const RED = '\x1b[31m';
 const GREEN = '\x1b[32m';
 
 function formatInstalls(count: number): string {
-  if (count === undefined || count === null || Number.isNaN(count)) return '';
-  if (count <= 0) return '0 installs';
-  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1).replace(/\.0$/, '')}M installs`;
-  if (count >= 1_000) return `${(count / 1_000).toFixed(1).replace(/\.0$/, '')}K installs`;
-  return `${count} install${count === 1 ? '' : 's'}`;
+  if (count === undefined || count === null || Number.isNaN(count)) return '0';
+  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
+  if (count >= 1_000) return `${(count / 1_000).toFixed(1).replace(/\.0$/, '')}K`;
+  return String(count);
 }
 
-/** 根据 risk_score 返回带颜色的风险等级标签（格式为 "medium risk" 等，整串同色），未知时返回空串 */
+/** 根据 risk_score 返回带颜色的风险等级（safe/low/medium/high，整串同色），未知时返回空串 */
 function formatRiskLevel(riskScore: number | undefined): string {
   if (riskScore === undefined || riskScore === null) return '';
-  if (riskScore <= 20) return `${GREEN}safe risk${RESET}`;
-  if (riskScore <= 50) return `${GREEN}low risk${RESET}`;
-  if (riskScore <= 80) return `${YELLOW}medium risk${RESET}`;
-  return `${RED}high risk${RESET}`;
+  if (riskScore <= 20) return `${GREEN}safe${RESET}`;
+  if (riskScore <= 50) return `${GREEN}low${RESET}`;
+  if (riskScore <= 80) return `${YELLOW}medium${RESET}`;
+  return `${RED}high${RESET}`;
+}
+
+// key: value 输出的键名，按最长键（description:）补齐对齐
+const KV_KEY_WIDTH = 'description:'.length;
+function kvKey(key: string): string {
+  return `${DIM}${key.padEnd(KV_KEY_WIDTH)}${RESET}`;
 }
 
 // 在文本中高亮匹配的搜索词（不区分大小写，支持多词）
@@ -251,7 +255,9 @@ async function runSearchPrompt(initialQuery = '', owner?: string): Promise<Searc
     } else if (results.length === 0) {
       lines.push(`${DIM}No skills found${RESET}`);
     } else {
-      const maxVisible = 8;
+      // 每个结果 5 行（key: value 结构），条数过多会超出常见终端高度，
+      // 收敛到 6 条控制整体渲染高度
+      const maxVisible = 6;
       const visible = results.slice(0, maxVisible);
 
       for (let i = 0; i < visible.length; i++) {
@@ -260,24 +266,23 @@ async function runSearchPrompt(initialQuery = '', owner?: string): Promise<Searc
         const arrow = isSelected ? `${BOLD}>${RESET}` : ' ';
         const hlName = highlightMatches(skill.name, query);
         const name = isSelected ? `${BOLD}${hlName}${RESET}` : `${TEXT}${hlName}${RESET}`;
-        const source = skill.source ? ` ${DIM}${skill.source}${RESET}` : '';
-        const installs = formatInstalls(skill.installs);
-        const installsBadge = installs ? ` ${CYAN}${installs}${RESET}` : '';
         const risk = formatRiskLevel(skill.riskScore);
-        const riskBadge = risk ? ` ${risk}` : '';
         const loadingIndicator = loading && i === 0 ? ` ${DIM}...${RESET}` : '';
 
-        lines.push(`  ${arrow} ${name}${source}${loadingIndicator}`);
-        if (installsBadge || riskBadge) {
-          const meta = [installsBadge.trimStart(), riskBadge.trimStart()].filter(Boolean).join(' ');
-          lines.push(`    ${meta}`);
+        lines.push(`  ${arrow} ${kvKey('skill_name:')} ${name}${loadingIndicator}`);
+        lines.push(`    ${kvKey('skill_id:')} ${CYAN}${skill.slug}${RESET}`);
+        lines.push(`    ${kvKey('installs:')} ${CYAN}${formatInstalls(skill.installs)}${RESET}`);
+        if (risk) {
+          lines.push(`    ${kvKey('risk:')} ${risk}`);
         }
         if (skill.description) {
           const descPlain =
             skill.description.length > 80
               ? `${skill.description.slice(0, 77)}...`
               : skill.description;
-          lines.push(`    ${DIM}${highlightMatches(descPlain, query)}${RESET}`);
+          lines.push(
+            `    ${kvKey('description:')} ${DIM}${highlightMatches(descPlain, query)}${RESET}`
+          );
         }
       }
     }
@@ -404,57 +409,17 @@ async function runSearchPrompt(initialQuery = '', owner?: string): Promise<Searc
   });
 }
 
-// Parse owner/repo from a package string (for the find command)
-function getOwnerRepoFromString(pkg: string): { owner: string; repo: string } | null {
-  // Handle owner/repo or owner/repo@skill
-  const atIndex = pkg.lastIndexOf('@');
-  const repoPath = atIndex > 0 ? pkg.slice(0, atIndex) : pkg;
-
-  // URL format: https://github.com/owner/repo or https://github.com/owner/repo.git
-  const urlMatch = repoPath.match(/^https?:\/\/[^/]+\/([^/]+)\/([^/]+?)(?:\.git)?\/?$/);
-  if (urlMatch) {
-    return { owner: urlMatch[1]!, repo: urlMatch[2]! };
-  }
-
-  // Blob URL format: https://host/owner/repo/blob/<ref>/<path>/SKILL.md
-  const blobMatch = repoPath.match(/^https?:\/\/[^/]+\/([^/]+)\/([^/]+?)\/blob\//);
-  if (blobMatch) {
-    return { owner: blobMatch[1]!, repo: blobMatch[2]! };
-  }
-
-  // owner/repo shorthand
-  const shorthandMatch = repoPath.match(/^([^/]+)\/([^/]+)$/);
-  if (shorthandMatch) {
-    return { owner: shorthandMatch[1]!, repo: shorthandMatch[2]! };
-  }
-
-  // slug format: platform/owner/repo/...
-  const slugMatch = repoPath.match(/^[^/]+\/([^/]+)\/([^/]+)/);
-  if (slugMatch) {
-    return { owner: slugMatch[1]!, repo: slugMatch[2]! };
-  }
-
-  return null;
-}
-
-async function isRepoPublic(owner: string, repo: string): Promise<boolean> {
-  const isPrivate = await isRepoPrivate(owner, repo);
-  // Return true only if we know it's public (isPrivate === false)
-  // Return false if private or unable to determine
-  return isPrivate === false;
-}
-
 export async function runFind(args: string[]): Promise<void> {
   const { query, options: findOptions, errors } = parseFindOptions(args);
   const owner = findOptions.owner;
   const isNonInteractive = !process.stdin.isTTY;
   const agentTip = `${DIM}Tip: if running in a coding agent, follow these steps:${RESET}
 ${DIM}  1) npx wittyhub find [query] [--owner <owner>]${RESET}
-${DIM}  2) npx wittyhub add <owner/repo@skill>${RESET}`;
+${DIM}  2) npx wittyhub add <skill_id>${RESET}`;
 
   if (errors.length > 0) {
     for (const error of errors) console.error(error);
-    console.error('Usage: npx skills find <query> [--owner <owner>]');
+    console.error('Usage: npx wittyhub find <query> [--owner <owner>]');
     return;
   }
 
@@ -480,32 +445,28 @@ ${DIM}  2) npx wittyhub add <owner/repo@skill>${RESET}`;
       return;
     }
 
-    console.log(`${DIM}Install with${RESET} npx wittyhub add <repo-url> --skill <skill>`);
+    console.log(`${DIM}Install with${RESET} npx wittyhub add ${TEXT}<skill_id>${RESET}`);
     console.log();
 
     for (const skill of results.slice(0, 6)) {
-      const raw = skill.sourceUrl || skill.source || skill.slug;
       const hlName = highlightMatches(skill.name, query);
-      const installTarget = skill.sourceUrl
-        ? `${skill.sourceUrl} --skill ${hlName}`
-        : `${raw}@${hlName}`;
-      const installs = formatInstalls(skill.installs);
-      const installsBadge = installs ? ` ${CYAN}${installs}${RESET}` : '';
       const risk = formatRiskLevel(skill.riskScore);
-      const riskBadge = risk ? ` ${risk}` : '';
-      console.log(`${TEXT}${installTarget}${RESET}`);
-      if (installsBadge || riskBadge) {
-        const meta = [installsBadge.trimStart(), riskBadge.trimStart()].filter(Boolean).join(' ');
-        console.log(`  ${meta}`);
+
+      console.log(`${BOLD}●${RESET} ${kvKey('skill_name:')} ${BOLD}${hlName}${RESET}`);
+      console.log(`  ${kvKey('skill_id:')} ${CYAN}${skill.slug}${RESET}`);
+      console.log(`  ${kvKey('installs:')} ${CYAN}${formatInstalls(skill.installs)}${RESET}`);
+      if (risk) {
+        console.log(`  ${kvKey('risk:')} ${risk}`);
       }
       if (skill.description) {
         const descPlain =
           skill.description.length > 100
             ? `${skill.description.slice(0, 97)}...`
             : skill.description;
-        console.log(`${DIM}  ${highlightMatches(descPlain, query)}${RESET}`);
+        console.log(
+          `  ${kvKey('description:')} ${DIM}${highlightMatches(descPlain, query)}${RESET}`
+        );
       }
-      console.log(`${DIM}└ ${skill.sourceUrl || `https://skills.sh/${skill.slug}`}${RESET}`);
       console.log();
     }
     return;
@@ -535,28 +496,24 @@ ${DIM}  2) npx wittyhub add <owner/repo@skill>${RESET}`;
     return;
   }
 
-  // Use sourceUrl (repo URL) and skill name for installation
-  const pkg = selected.sourceUrl || selected.source || selected.slug;
+  // Install via skill_id — consistent with the identifier shown in search
+  // results and the recommended `wittyhub add <skill_id>` usage.
+  const skillId = selected.slug;
   const skillName = selected.name;
 
   console.log();
-  console.log(`${TEXT}Installing ${BOLD}${skillName}${RESET} from ${DIM}${pkg}${RESET}...`);
+  console.log(`${TEXT}Installing ${BOLD}${skillName}${RESET} ${DIM}(${skillId})${RESET}...`);
   console.log();
 
   // Run add directly since we're in the same CLI
-  const { source, options: addOptions } = parseAddOptions([pkg, '--skill', skillName]);
+  const { source, options: addOptions } = parseAddOptions([skillId]);
   await runAdd(source, addOptions);
 
   console.log();
 
-  const info = getOwnerRepoFromString(pkg);
-  if (info && (await isRepoPublic(info.owner, info.repo))) {
-    console.log(
-      `${DIM}View the skill at${RESET} ${TEXT}https://skills.sh/${selected.slug}${RESET}`
-    );
-  } else {
-    console.log(`${DIM}Discover more skills at${RESET} ${TEXT}https://skills.sh${RESET}`);
-  }
+  console.log(
+    `${DIM}View the skill at${RESET} ${TEXT}https://skillhub.openeuler.org/skills/${selected.slug}${RESET}`
+  );
 
   console.log();
 }

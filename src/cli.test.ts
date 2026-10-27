@@ -73,7 +73,8 @@ describe('skills CLI', () => {
       expect(output).toContain('npx wittyhub use');
       expect(output).toContain('npx wittyhub update');
       expect(output).toContain('npx wittyhub init');
-      expect(output).toContain('skills.sh');
+      expect(output).toContain('npx wittyhub validate');
+      expect(output).toContain('skillhub.openeuler.org');
     });
   });
 

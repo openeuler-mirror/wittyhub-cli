@@ -29,12 +29,12 @@ describe('init command', () => {
       Next steps:
         1. Edit my-test-skill/SKILL.md to define your skill instructions
         2. Update the name and description in the frontmatter
+        3. Optionally set version and category (see the comment in my-test-skill/SKILL.md for the full list of categories)
 
       Publishing:
-        GitHub:  Push to a repo, then npx wittyhub add <owner>/<repo>
-        URL:     Host the file, then npx wittyhub add https://example.com/my-test-skill/SKILL.md
+        Submit your skill to https://gitcode.com/openeuler/openEuler-skills
 
-      Browse existing skills for inspiration at https://skills.sh/
+      Browse existing skills for inspiration at https://skillhub.openeuler.org/
 
       "
     `);
@@ -47,6 +47,8 @@ describe('init command', () => {
       "---
       name: my-test-skill
       description: A brief description of what this skill does
+      version: 0.1.0  # optional; increment as needed
+      category: others  # optional;change if needed — full list at https://gitcode.com/openeuler/openEuler-skills
       ---
 
       # my-test-skill
@@ -74,26 +76,23 @@ describe('init command', () => {
     expect(existsSync(join(testDir, 'waterfall-data-fetching', 'SKILL.md'))).toBe(true);
   });
 
-  it('should init SKILL.md in cwd when no name provided', () => {
+  it('should default to my-skill subdirectory when no name provided', () => {
     const output = stripLogo(runCliOutput(['init'], testDir));
 
-    expect(output).toContain('Initialized skill:');
-    expect(output).toContain('Created:\n  SKILL.md'); // directly in cwd, not in a subfolder
+    expect(output).toContain('Initialized skill: my-skill');
+    expect(output).toContain('Created:\n  my-skill/SKILL.md'); // in a subfolder, not directly in cwd
     expect(output).toContain('Publishing:');
-    expect(output).toContain('GitHub:');
-    expect(output).toContain('npx wittyhub add <owner>/<repo>');
-    expect(output).toContain('URL:');
-    expect(output).toContain('npx wittyhub add https://example.com/SKILL.md');
-    expect(existsSync(join(testDir, 'SKILL.md'))).toBe(true);
+    expect(output).toContain('Submit your skill to https://gitcode.com/openeuler/openEuler-skills');
+    expect(existsSync(join(testDir, 'my-skill', 'SKILL.md'))).toBe(true);
   });
 
   it('should show publishing hints with skill path', () => {
     const output = stripLogo(runCliOutput(['init', 'my-skill'], testDir));
 
     expect(output).toContain('Publishing:');
-    expect(output).toContain('GitHub:  Push to a repo, then npx wittyhub add <owner>/<repo>');
+    expect(output).toContain('Submit your skill to https://gitcode.com/openeuler/openEuler-skills');
     expect(output).toContain(
-      'URL:     Host the file, then npx wittyhub add https://example.com/my-skill/SKILL.md'
+      'Browse existing skills for inspiration at https://skillhub.openeuler.org/'
     );
   });
 

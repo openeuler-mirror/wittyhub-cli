@@ -1,4 +1,5 @@
 import { AUDIT_URL, TELEMETRY_URL } from './config.ts';
+import { buildSkillId } from './skill-resolver.ts';
 
 interface InstallTelemetryData {
   event: 'install';
@@ -131,38 +132,6 @@ export function slugifyTelemetryValue(value: string): string {
   return normalized.replace(/^-|-$/g, '');
 }
 
-function buildSkillId(
-  sourceType: string,
-  ownerRepo: string,
-  skillName: string,
-  skillFiles?: Record<string, string>
-): string | null {
-  if (!['github', 'gitcode', 'gitlab', 'gitee'].includes(sourceType)) return null;
-  if (!ownerRepo) return null;
-
-  // Slugify owner/repo to match Python extract_owner_repo (slugify_identifier)
-  const slugifiedOwnerRepo = ownerRepo.split('/').map(slugifyTelemetryValue).join('/');
-
-  if (skillFiles) {
-    const relativePath = skillFiles[skillName];
-    if (relativePath) {
-      const normalizedPath = relativePath.trim().replace(/\\/g, '/').replace(/\/+$/, '');
-      if (normalizedPath === 'SKILL.md') {
-        const skillPath = slugifiedOwnerRepo.split('/').pop()!;
-        return `${sourceType}/${slugifiedOwnerRepo}/${skillPath}`;
-      }
-      if (normalizedPath.endsWith('/SKILL.md')) {
-        const skillPath = normalizedPath.slice(0, -'/SKILL.md'.length);
-        return `${sourceType}/${slugifiedOwnerRepo}/${skillPath}`;
-      }
-    }
-  }
-
-  const skillPath = slugifyTelemetryValue(skillName);
-  if (!skillPath) return null;
-  return `${sourceType}/${slugifiedOwnerRepo}/${skillPath}`;
-}
-
 /**
  * Fetch security audit results for skills via the per-skill audit endpoint.
  * Returns null on any error or timeout — never blocks installation.
@@ -186,10 +155,9 @@ export async function fetchAuditData(
       if (!skillId) return;
 
       try {
-        const response = await fetch(
-          AUDIT_URL.replace('{skill_id}', skillId.split('/').map(encodeURIComponent).join('/')),
-          { signal: controller.signal }
-        );
+        const response = await fetch(AUDIT_URL.replace('{skill_id}', skillId), {
+          signal: controller.signal,
+        });
         if (response.ok) {
           const data = (await response.json()) as Record<string, unknown>;
           if (!data.error) {
@@ -209,6 +177,45 @@ export async function fetchAuditData(
 
     await Promise.all(promises);
     return Object.keys(results).length > 0 ? results : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/**
+ * Fetch audit data for a single skill by its skill_id. Used when the skill_id
+ * is already known (e.g. `wittyhub add <skill_id>`), so we can skip the
+ * owner/repo + skillFiles derivation step.
+ */
+export async function fetchAuditBySkillId(
+  skillId: string,
+  timeoutMs = 15000
+): Promise<AuditResponse | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(AUDIT_URL.replace('{skill_id}', skillId), {
+      signal: controller.signal,
+    });
+    if (response.ok) {
+      const data = (await response.json()) as Record<string, unknown>;
+      if (!data.error) {
+        const auditData = (data.data || data) as Record<string, unknown>;
+        const skillName = skillId.split('/').pop() || skillId;
+        return {
+          [skillName]: {
+            risk_level: (auditData.risk_level as SkillAuditResult['risk_level']) ?? 'unknown',
+            risk_score: (auditData.risk_score as number) ?? null,
+            risk_signals: (auditData.risk_signals as SecuritySignal[]) ?? [],
+            audited_at: (auditData.audited_at as string) ?? null,
+          },
+        };
+      }
+    }
+    return null;
   } catch {
     return null;
   } finally {

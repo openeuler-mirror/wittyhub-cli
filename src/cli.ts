@@ -102,7 +102,7 @@ function showBanner(): void {
     `  ${DIM}$${RESET} ${TEXT}npx wittyhub experimental_sync${RESET}    ${DIM}Sync skills from node_modules${RESET}`
   );
   console.log();
-  console.log(`${DIM}try:${RESET} npx wittyhub add vercel-labs/agent-skills`);
+  console.log(`${DIM}try:${RESET} npx wittyhub add gitcode:openeuler/witty-diagnosis-agent`);
   console.log();
   console.log(`Discover more skills at ${TEXT}https://skillhub.openeuler.org/${RESET}`);
   console.log();
@@ -121,12 +121,8 @@ ${BOLD}Manage Skills:${RESET}
   remove [skills]      Remove installed skills
   list, ls             List installed skills
   find [query]         Search for skills interactively
-  audit <source> --skill <skill>
-                       Show security audit result (risk level + risk signals)
-                       e.g. audit https://github.com/huggingface/transformers --skill add-or-fix-type-checking
-  get <source> --skill <skill>
-                       View skill details (author/category/version/description/tags)
-                       e.g. get https://github.com/huggingface/transformers --skill add-or-fix-type-checking
+  audit <skill_id>       Show security audit result (risk level + risk signals)
+  get <skill_id>         View skill details (author/category/version/description/tags)
   validate <path>     Validate a local skill for spec compliance (SKILL.md filename,
                        frontmatter, required fields name/description, etc.)
 
@@ -156,6 +152,7 @@ ${BOLD}Add Options:${RESET}
   --subagent <names>     Install to Eve subagents (use 'root' for the root agent)
   --all                  Shorthand for --skill '*' --agent '*' -y
   --full-depth           Search all subdirectories even when a root SKILL.md exists
+  -v, --version <ver>    Download a specific skill version from skill_versions table
 
 ${BOLD}Use Options:${RESET}
   -s, --skill <skill>    Specify the skill to use
