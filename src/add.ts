@@ -594,9 +594,13 @@ function buildTargetSummaryLines(targets: InstallTarget[], installMode: InstallM
 /**
  * Ensures universal agents are always included in the target agents list.
  * Used when -y flag is passed or when auto-selecting agents.
+ *
+ * Agents with an exclusive global dir are excluded: auto-adding them would create
+ * per-agent copies (e.g. ~/.cursor/skills) on machines where those agents are not
+ * installed. They are still installed when detected or explicitly requested.
  */
 function ensureUniversalAgents(targetAgents: AgentType[]): AgentType[] {
-  const universalAgents = getUniversalAgents();
+  const universalAgents = getUniversalAgents().filter((a) => !agents[a].exclusiveGlobal);
   const result = [...targetAgents];
 
   for (const ua of universalAgents) {
@@ -1090,6 +1094,12 @@ async function handleWellKnownSkills(
     installMode = modeChoice as InstallMode;
   } else if (uniqueDirs.size <= 1) {
     // Single target directory — default to copy (no symlink needed)
+    installMode = 'copy';
+  }
+
+  // Agents with an exclusive global dir must be written directly: a canonical
+  // symlink would recreate the shared ~/.agents/skills copy.
+  if (installGlobally && targetAgents.some((a) => agents[a].exclusiveGlobal)) {
     installMode = 'copy';
   }
 
@@ -2213,6 +2223,12 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
       installMode = modeChoice as InstallMode;
     } else if (uniqueDirs.size <= 1 || allEve) {
       // Single target directory (or all-Eve) — default to copy (no symlink needed)
+      installMode = 'copy';
+    }
+
+    // Agents with an exclusive global dir must be written directly: a canonical
+    // symlink would recreate the shared ~/.agents/skills copy.
+    if (installGlobally && targetAgents.some((a) => agents[a].exclusiveGlobal)) {
       installMode = 'copy';
     }
 

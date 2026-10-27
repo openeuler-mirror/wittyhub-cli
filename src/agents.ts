@@ -15,6 +15,43 @@ const autohandHome = process.env.AUTOHAND_HOME?.trim() || join(home, '.autohand'
 const zedAppDataHome = process.env.APPDATA?.trim();
 const zedFlatpakConfigHome = process.env.FLATPAK_XDG_CONFIG_HOME?.trim();
 
+/**
+ * Doubao (豆包) uses the `.doubao` profile subdir; Doubao Work (豆包工作)
+ * uses `.doubaowork`. User-installed skills live in `.user_skills` under the
+ * workspace; `.skills` holds downloaded/system skills.
+ *
+ * Verified against official clients:
+ * - macOS Doubao (2.32.6):
+ *   ~/Library/Application Support/Doubao/Default/.doubao/agent_mode/workspace/.user_skills
+ * - macOS Doubao Work (installed on this machine):
+ *   ~/Library/Application Support/DoubaoWork/Default/.doubaowork/agent_mode/workspace/.user_skills
+ * - Windows Doubao (2.32.6, path whitelist in Doubao.dll):
+ *   %LOCALAPPDATA%\Doubao\User Data\Default\.doubao\agent_mode\workspace\.user_skills
+ *
+ * There is no official Linux client for either product.
+ */
+function getDoubaoDataRoot(appDir: 'Doubao' | 'DoubaoWork', envVar: string): string {
+  const override = process.env[envVar]?.trim();
+  if (override) {
+    return override;
+  }
+  if (process.platform === 'darwin') {
+    return join(home, 'Library', 'Application Support', appDir);
+  }
+  if (process.platform === 'win32') {
+    const localAppData = process.env.LOCALAPPDATA?.trim() || join(home, 'AppData', 'Local');
+    return join(localAppData, appDir, 'User Data');
+  }
+  return join(configHome, appDir);
+}
+
+const doubaoHome = getDoubaoDataRoot('Doubao', 'DOUBAO_HOME');
+const doubaoWorkHome = getDoubaoDataRoot('DoubaoWork', 'DOUBAO_WORK_HOME');
+
+function getDoubaoWorkspaceDir(dataRoot: string, profileSubdir: '.doubao' | '.doubaowork'): string {
+  return join(dataRoot, 'Default', profileSubdir, 'agent_mode', 'workspace');
+}
+
 function packageJsonHasDependency(packageJsonPath: string, dependencyName: string): boolean {
   try {
     const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8')) as {
@@ -36,6 +73,7 @@ export function getOpenClawGlobalSkillsDir(
   if (pathExists(join(homeDir, '.openclaw'))) {
     return join(homeDir, '.openclaw/skills');
   }
+  // Legacy state dirs kept for users who have not migrated yet.
   if (pathExists(join(homeDir, '.clawdbot'))) {
     return join(homeDir, '.clawdbot/skills');
   }
@@ -189,7 +227,12 @@ export const agents: Record<AgentType, AgentConfig> = {
     name: 'codex',
     displayName: 'Codex',
     skillsDir: '.agents/skills',
+    // User-requested isolated location. Codex's documented user-level skill
+    // directory is $HOME/.agents/skills; if Codex does not discover this dir,
+    // add a [[skills.config]] entry in ~/.codex/config.toml for the skill.
+    // Keep honoring CODEX_HOME so custom installs are not written to ~/.codex.
     globalSkillsDir: join(codexHome, 'skills'),
+    exclusiveGlobal: true,
     detectInstalled: async () => {
       return existsSync(codexHome) || existsSync('/etc/codex');
     },
@@ -235,6 +278,7 @@ export const agents: Record<AgentType, AgentConfig> = {
     displayName: 'Cursor',
     skillsDir: '.agents/skills',
     globalSkillsDir: join(home, '.cursor/skills'),
+    exclusiveGlobal: true,
     detectInstalled: async () => {
       return existsSync(join(home, '.cursor'));
     },
@@ -265,6 +309,27 @@ export const agents: Record<AgentType, AgentConfig> = {
     showInUniversalPrompt: false,
     detectInstalled: async () => {
       return existsSync(join(home, '.dexto'));
+    },
+  },
+  doubao: {
+    name: 'doubao',
+    displayName: 'Doubao',
+    skillsDir: '.doubao/agent_mode/workspace/.user_skills',
+    globalSkillsDir: join(getDoubaoWorkspaceDir(doubaoHome, '.doubao'), '.user_skills'),
+    detectInstalled: async () => {
+      return existsSync(doubaoHome);
+    },
+  },
+  'doubao-work': {
+    name: 'doubao-work',
+    displayName: 'Doubao Work',
+    // Verified on macOS: DoubaoWork keeps its own Chromium profile under the
+    // DoubaoWork data root and uses `.doubaowork` (not `.doubao`).
+    skillsDir: '.agents/skills',
+    globalSkillsDir: join(getDoubaoWorkspaceDir(doubaoWorkHome, '.doubaowork'), '.user_skills'),
+    exclusiveGlobal: true,
+    detectInstalled: async () => {
+      return existsSync(doubaoWorkHome);
     },
   },
   droid: {
@@ -312,6 +377,7 @@ export const agents: Record<AgentType, AgentConfig> = {
     displayName: 'Gemini CLI',
     skillsDir: '.agents/skills',
     globalSkillsDir: join(home, '.gemini/skills'),
+    exclusiveGlobal: true,
     detectInstalled: async () => {
       return existsSync(join(home, '.gemini'));
     },
@@ -475,6 +541,7 @@ export const agents: Record<AgentType, AgentConfig> = {
     displayName: 'OpenCode',
     skillsDir: '.agents/skills',
     globalSkillsDir: join(configHome, 'opencode/skills'),
+    exclusiveGlobal: true,
     detectInstalled: async () => {
       return existsSync(join(configHome, 'opencode'));
     },
@@ -522,6 +589,15 @@ export const agents: Record<AgentType, AgentConfig> = {
     globalSkillsDir: join(home, '.qoder-cn/skills'),
     detectInstalled: async () => {
       return existsSync(join(home, '.qoder-cn'));
+    },
+  },
+  qoderwork: {
+    name: 'qoderwork',
+    displayName: 'QoderWork',
+    skillsDir: '.qoderwork/skills',
+    globalSkillsDir: join(home, '.qoderwork/skills'),
+    detectInstalled: async () => {
+      return existsSync(join(home, '.qoderwork'));
     },
   },
   'qwen-code': {
@@ -622,6 +698,18 @@ export const agents: Record<AgentType, AgentConfig> = {
     globalSkillsDir: join(home, '.agents/skills'),
     detectInstalled: async () => {
       return existsSync(join(home, '.warp'));
+    },
+  },
+  workbuddy: {
+    name: 'workbuddy',
+    displayName: 'WorkBuddy',
+    // Official discovery order: project `.agents/skills`, workspace `skills`,
+    // then user-level `~/.workbuddy/skills`. Use the workspace `skills` dir here
+    // so the global install still targets WorkBuddy's own user directory.
+    skillsDir: 'skills',
+    globalSkillsDir: join(home, '.workbuddy/skills'),
+    detectInstalled: async () => {
+      return existsSync(join(home, '.workbuddy'));
     },
   },
   windsurf: {
